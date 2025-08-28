@@ -17,7 +17,7 @@ resource "helm_release" "this" {
   max_history                = lookup(var.app, "max_history", 0)
   lint                       = lookup(var.app, "lint", true)
   cleanup_on_fail            = lookup(var.app, "cleanup_on_fail", false)
-  create_namespace           = lookup(var.app, "create_namespace", false)
+  create_namespace           = lookup(var.app, "create_namespace", true)
   disable_webhooks           = lookup(var.app, "disable_webhooks", false)
   verify                     = lookup(var.app, "verify", false)
   reuse_values               = lookup(var.app, "reuse_values", false)
