@@ -262,7 +262,7 @@ controller:
   # service.
   # ---
   # region: us-east-1
-  region:
+  region: us-east-1
   replicaCount: ${replicaCount}
   revisionHistoryLimit: 10
   socketDirVolume:
