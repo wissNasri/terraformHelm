@@ -44,10 +44,10 @@ resource "aws_iam_policy" "alb_policy" {
 # Le module qui crée le rôle IAM avec la relation de confiance OIDC.
 module "iam_assumable_role_with_oidc" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
-  version = "~> 5.30" # Utiliser une version récente et compatible
+  version = "~> 2.0" 
 
   create_role = true
-  role_name   = "AmazonEKSLoadBalancerControllerRole-${var.cluster_name}" # Nom de rôle unique
+  role_name   = "AmazonEKSLoadBalancerControllerRole" 
 
   # CORRECTION DYNAMIQUE :
   # On utilise l'URL du fournisseur OIDC trouvée par la data source.
