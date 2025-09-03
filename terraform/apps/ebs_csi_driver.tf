@@ -6,10 +6,10 @@
 
 module "iam_assumable_role_with_oidc_ebs" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
-  version = "~> 5.30"
+  version = "~> 2.0"
 
   create_role = true
-  role_name   = "AmazonEKS_EBS_CSI_DriverRole-${var.cluster_name}"
+  role_name   = "AmazonEKS_EBS_CSI_DriverRole"
 
   tags = {
     Cluster = var.cluster_name
@@ -38,7 +38,7 @@ module "ebs_csi_driver" {
   app = {
     name          = "aws-ebs-csi-driver"
     description   = "aws-ebs-csi-driver"
-    version       = "2.29.0" # Version suggérée
+    version       = "2.45.1" 
     chart         = "aws-ebs-csi-driver"
     force_update  = true
     wait          = false
