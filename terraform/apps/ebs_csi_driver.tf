@@ -10,7 +10,12 @@ module "iam_assumable_role_with_oidc_ebs" {
     Role = "role-ebs-csi-driver"
   }
 
+
+########################################"
   provider_url = "oidc.eks.ap-south-1.amazonaws.com/id/48D441B543341965034A0A4E4F5CCAE5"
+##########################################"
+
+
 
   role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy",
