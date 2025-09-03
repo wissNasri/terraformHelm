@@ -1,34 +1,56 @@
-
-# Fichier : terraform/apps/data.tf
+# Fichier : terraform/apps/provider.tf
 
 # =================================================================
-# DÉCOUVERTE DE L'INFRASTRUCTURE PARTAGÉE
+# CONFIGURATION DES PROVIDERS ET DU BACKEND
 # =================================================================
-# Ce fichier utilise des "data sources" pour trouver les informations
-# de l'infrastructure de base (Cluster EKS, VPC, Région).
+# Ce fichier configure la manière dont Terraform se connecte aux
+# différentes plateformes (AWS, Kubernetes) et où il stocke son
+# fichier d'état (le backend S3).
 
-# Variable pour spécifier le nom du cluster à cibler.
-# C'est le seul point d'entrée nécessaire pour que tout le reste fonctionne.
-variable "cluster_name" {
-  description = "Le nom du cluster EKS cible pour le déploiement des applications."
-  type        = string
-  default     = "tws-eks-cluster" # Correspond au `local.name` de votre projet d'infrastructure.
+terraform {
+  # 1. Déclaration des providers requis par ce projet.
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = ">= 2.12"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = ">= 2.20"
+    }
+  }
+
+  # 2. Configuration du backend distant pour stocker l'état de manière sécurisée.
+  backend "s3" {
+    bucket         = "terraform-s3-backend-tws-hackathon111"
+    key            = "apps/terraform.tfstate" # Chemin unique pour ce projet
+    region         = "us-east-1"
+    dynamodb_table = "terraform-locks"
+    encrypt        = true
+  }
 }
 
-# 1. Trouve la région AWS dans laquelle Terraform est exécuté.
-data "aws_region" "current" {}
-
-# 2. Trouve le cluster EKS en utilisant le nom fourni dans la variable.
-data "aws_eks_cluster" "cluster" {
-  name = var.cluster_name
+# 3. Provider AWS : Pour interagir avec les services AWS (ex: créer des rôles IAM).
+provider "aws" {
+  region = data.aws_region.current.name
 }
 
-# 3. Trouve le VPC associé au cluster EKS découvert ci-dessus.
-data "aws_vpc" "cluster_vpc" {
-  id = data.aws_eks_cluster.cluster.vpc_config[0].vpc_id
+# 4. Provider Helm : Pour déployer des charts Helm dans le cluster.
+provider "helm" {
+  kubernetes {
+    host                   = data.aws_eks_cluster.cluster.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+    token                  = data.aws_eks_cluster_auth.cluster.token
+  }
 }
 
-# 4. Génère un token d'authentification temporaire pour se connecter au cluster.
-data "aws_eks_cluster_auth" "cluster" {
-  name = var.cluster_name
+# 5. Provider Kubernetes : Pour gérer des ressources Kubernetes directement.
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.cluster.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.cluster.token
 }
