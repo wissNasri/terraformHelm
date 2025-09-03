@@ -15,7 +15,18 @@ module "iam_assumable_role_with_oidc" {
     Role = "role-alb-controller"
   }
 
-  provider_url = "oidc.eks.ap-south-1.amazonaws.com/id/48D441B543341965034A0A4E4F5CCAE5"
+
+
+#################################################################################"
+
+# dans eks cluster existe le provider url or dans iam idendtity provider 
+
+  provider_url = "$$$$$$$$$$$$$$dans eks cluster existe le provider url or dans iam idendtity provider $$$$$$$$$"
+
+########################################################################################################
+
+
+
 
   role_policy_arns = [
     aws_iam_policy.alb_policy.arn,
