@@ -14,8 +14,7 @@ variable "cluster_name" {
   default     = "tws-eks-cluster" # Correspond au `local.name` de votre projet d'infrastructure.
 }
 
-# 1. Trouve la région AWS dans laquelle Terraform est exécuté.
-data "aws_region" "current" {}
+
 
 # 2. Trouve le cluster EKS en utilisant le nom fourni dans la variable.
 data "aws_eks_cluster" "cluster" {
