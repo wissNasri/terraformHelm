@@ -1,8 +1,11 @@
 # Default values for aws-load-balancer-controller.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
-
+###############"
 replicaCount: ${replicaCount}
+#########################
+
+
 
 revisionHistoryLimit: 10
 
@@ -120,8 +123,18 @@ certManager:
   duration:
   renewBefore:
 
+
+
+  
+
+#####################################changer cette name 
 # The name of the Kubernetes cluster. A non-empty value is required
 clusterName: "dock-eks-cluster"
+
+
+
+
+
 
 # cluster contains configurations specific to the kubernetes cluster
 cluster:
@@ -160,11 +173,21 @@ ingressClassParams:
 # If specified as true, the IngressClass resource will be created.
 createIngressClassResource: true
 
-# The AWS region for the kubernetes cluster. Set to use KIAM or kube2iam for example.
-region: "us-east-1"
+# The AWS region for the kubernetes cluster. Set to use KIAM or kube2iam for example.#"
 
+
+
+###########################
+region: "us-east-1"
+############################
+
+
+########################## il faut changer a chaque terraform apply si non utiliser template ou n'importe quoi 
 # The VPC ID for the Kubernetes cluster. Set this manually when your pods are unable to use the metadata service to determine this automatically
 vpcId: "vpc-0b19cb48bba813852"
+############################################""
+
+
 
 # This is alternative to vpcId. Set this when your pods are unable to use the metadata service to determine VPC automatically.
 vpcTags: {}
