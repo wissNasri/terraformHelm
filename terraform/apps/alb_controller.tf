@@ -55,6 +55,7 @@ module "alb_controller" {
   values = [templatefile("${path.module}/helm-values/alb_controller-1.13.3.yaml", {
     cluster_name = var.cluster_name
     vpc_id       = data.aws_vpc.cluster_vpc.id
+    aws_region   = data.aws_region.current.name
     replicaCount = 1
   } )]
 
