@@ -5,9 +5,11 @@
 # =================================================================
 # Ce fichier utilise des "data sources" pour trouver les informations
 # de l'infrastructure de base (Cluster EKS, VPC, Région).
-
-
-
+variable "cluster_name" {
+  description = "Le nom du cluster EKS cible pour le déploiement des applications."
+  type        = string
+  default     = "tws-eks-cluster"
+}
 
 
 # 2. Trouve le cluster EKS en utilisant le nom fourni dans la variable.
