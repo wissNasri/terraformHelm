@@ -12,7 +12,7 @@ module "iam_assumable_role_with_oidc_ebs" {
 
 
 ########################################"
-  provider_url = "oidc.eks.ap-south-1.amazonaws.com/id/48D441B543341965034A0A4E4F5CCAE5"
+  provider_url = "oidc.eks.us-east-1.amazonaws.com/id/3807DC4B6930C2C422F8DFA3F5540BFD"
 ##########################################"
 
 
