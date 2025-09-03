@@ -43,11 +43,14 @@ provider "aws" {
 
 # 4. Provider Helm : Pour déployer des charts Helm dans le cluster.
 provider "helm" {
-  kubernetes {
+  kubernetes = {
     host                   = data.aws_eks_cluster.cluster.endpoint
     cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
     token                  = data.aws_eks_cluster_auth.cluster.token
   }
+  
+  # ✅ AJOUTER CETTE LIGNE
+  depends_on = [data.aws_eks_cluster.cluster, data.aws_eks_cluster_auth.cluster]
 }
 
 # 5. Provider Kubernetes : Pour gérer des ressources Kubernetes directement.
