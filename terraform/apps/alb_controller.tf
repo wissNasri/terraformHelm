@@ -21,7 +21,7 @@ module "iam_assumable_role_with_oidc" {
 
 # dans eks cluster existe le provider url or dans iam idendtity provider 
 
-  provider_url = "$$$$$$$$$$$$$$dans eks cluster existe le provider url or dans iam idendtity provider $$$$$$$$$"
+  provider_url = "oidc.eks.us-east-1.amazonaws.com/id/3807DC4B6930C2C422F8DFA3F5540BFD"
 
 ########################################################################################################
 
