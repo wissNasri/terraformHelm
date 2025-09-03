@@ -26,3 +26,5 @@ data "aws_vpc" "cluster_vpc" {
 data "aws_eks_cluster_auth" "cluster" {
   name = var.cluster_name
 }
+# Data source pour récupérer la région AWS dynamiquement
+data "aws_region" "current" {}
