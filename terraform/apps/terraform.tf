@@ -38,7 +38,7 @@ terraform {
 
 # 3. Provider AWS : Pour interagir avec les services AWS (ex: créer des rôles IAM).
 provider "aws" {
-  region = data.aws_region.current.name
+  region = "us-east-1"
 }
 
 # 4. Provider Helm : Pour déployer des charts Helm dans le cluster.
