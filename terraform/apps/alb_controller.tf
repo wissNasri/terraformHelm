@@ -54,7 +54,6 @@ module "alb_controller" {
   # On utilise 'templatefile' pour injecter les valeurs trouvées par data.tf
   values = [templatefile("${path.module}/helm-values/alb_controller-1.13.3.yaml", {
     cluster_name = var.cluster_name
-    region       = data.aws_region.current.name
     vpc_id       = data.aws_vpc.cluster_vpc.id
     replicaCount = 1
   } )]
