@@ -6,13 +6,7 @@
 # Ce fichier utilise des "data sources" pour trouver les informations
 # de l'infrastructure de base (Cluster EKS, VPC, Région).
 
-# Variable pour spécifier le nom du cluster à cibler.
-# C'est le seul point d'entrée nécessaire pour que tout le reste fonctionne.
-variable "cluster_name" {
-  description = "Le nom du cluster EKS cible pour le déploiement des applications."
-  type        = string
-  default     = "tws-eks-cluster" # Correspond au `local.name` de votre projet d'infrastructure.
-}
+
 
 
 
