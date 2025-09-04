@@ -178,7 +178,7 @@ createIngressClassResource: true
 
 
 ###########################
-region:  "us-east-1"
+region:  "${region}"
 ############################
 
 
