@@ -37,10 +37,10 @@ module "alb_controller" {
   }
 
   values = [templatefile("${path.module}/helm-values/alb_controller-1.13.3.yaml", {
-    cluster_name   = var.eks_cluster_name
-      region       = var.aws_region
-      vpc_id       = data.aws_eks_cluster.cluster.vpc_config[0].vpc_id 
-      replicaCount = 1
+    cluster_name  = var.eks_cluster_name
+    region        = var.aws_region
+    vpc_id        = data.aws_eks_cluster.cluster.vpc_config[0].vpc_id 
+    replicaCount  = 1
   } )]
 
   set = [
