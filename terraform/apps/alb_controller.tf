@@ -13,14 +13,15 @@ module "iam_assumable_role_with_oidc_alb" {
 
   provider_url = replace(data.aws_iam_openid_connect_provider.oidc_provider.url, "https://", "" )
 
-  # On attache la politique IAM créée juste au-dessus.
-  role_policy_arns = [ aws_iam_policy.alb_policy.arn ]
+  role_policy_arns = [ 
+      aws_iam_policy.alb_policy.arn, 
+]
 
 
 }
 
 module "alb_controller" {
-  source = "../modules/alb_controller" # Votre module local pour Helm
+  source = "../modules/alb_controller" 
 
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
@@ -37,7 +38,7 @@ module "alb_controller" {
 
   values = [templatefile("${path.module}/helm-values/alb_controller-1.13.3.yaml", {
       cluster_name = var.eks_cluster_name
-      aws_region   = var.aws_region
+      region   = var.aws_region
       vpc_id       = data.aws_eks_cluster.cluster.vpc_config[0].vpc_id 
       replicaCount = 1
   } )]
