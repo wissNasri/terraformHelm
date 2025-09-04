@@ -6,7 +6,7 @@ module "iam_assumable_role_with_oidc_ebs" {
   role_name   = "AmazonEKS_EBS_CSI_DriverRole"
 
   tags = {
-    Cluster = var.cluster_name
+    Cluster = var.eks_cluster_name
     Role    = "role-ebs-csi-driver"
   }
 
