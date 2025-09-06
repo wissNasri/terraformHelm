@@ -1,1 +1,20 @@
+module filebeat {
+  source  = "../modules/alb_controller"
 
+  namespace  = "logging"
+  repository =  "https://helm.elastic.co"
+
+  app = {
+    name          = "filebeat"
+    description   = "filebeat"
+    version       = "8.5.1"
+    chart         = "filebeat"
+    force_update  = true
+    wait          = false
+    recreate_pods = false
+    deploy        = 1
+  }
+  values = [file("${path.module}/helm-values/filebeat.yaml")]
+
+
+}
