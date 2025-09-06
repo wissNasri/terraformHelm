@@ -7,15 +7,14 @@ module elasticsearch {
   app = {
     name          = "elasticsearch"
     description   = "elasticsearch"
-    version       = "8.1.3"
+    version       = "8.5.1"
     chart         = "elasticsearch"
     force_update  = true
     wait          = false
     recreate_pods = false
     deploy        = 1
   }
-  values = [templatefile("${path.module}/helm-values/elasticsearch.yaml", {
-    serverReplicas = 1
-  })]
+  values = [file("${path.module}/helm-values/elasticsearch.yaml")]
+
 
 }
