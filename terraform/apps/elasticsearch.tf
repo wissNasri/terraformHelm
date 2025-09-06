@@ -1,4 +1,4 @@
-module argocd {
+module elasticsearch {
   source  = "../modules/alb_controller"
 
   namespace  = "logging"
