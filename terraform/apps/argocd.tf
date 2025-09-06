@@ -17,5 +17,7 @@ module argocd {
   values = [templatefile("${path.module}/helm-values/argocd-values.yaml", {
     serverReplicas = 1
   })]
-
+  depends_on = [
+    module.alb_controller
+  ]
 }
