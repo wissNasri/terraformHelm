@@ -140,18 +140,18 @@ ingress:
   className: "alb"
   pathtype: Prefix
   annotations:
-    alb.ingress.kubernetes.io/group.name: easyshop-app-lb
+    alb.ingress.kubernetes.io/group.name: iovision-app-lb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/backend-protocol: HTTP
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-south-1:876997124628:certificate/b69bb6e7-cbd1-490b-b765-27574080f48c
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:228578233417:certificate/cc1195ab-d9cd-4c2d-8f81-585fea51a766
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}, {"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
   # kubernetes.io/ingress.class: nginx
   # kubernetes.io/ingress.class: nginx
   # kubernetes.io/tls-acme: "true"
   hosts:
-    - host: logs-kibana.devopsdock.site
+    - host: logs-kibana.iovision.site
       paths:
         - path: /
   #tls: []
