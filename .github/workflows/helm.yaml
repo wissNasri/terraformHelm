@@ -27,7 +27,7 @@ jobs:
       # 3️⃣ Upload du rapport JSON comme artifact
       - name: Upload Checkov JSON Report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: checkov-report
           path: checkov-report.json
