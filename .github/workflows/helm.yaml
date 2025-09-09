@@ -25,7 +25,7 @@ jobs:
 
       # Étape 2: Exécuter l'action Checkov et afficher les résultats dans les logs
       - name: Lancer l'analyse Checkov
-        uses: bridgecrewio/checkov-action@main
+        uses: bridgecrewio/checkov-action@master
         with:
           # Scanne le répertoire entier.
           directory: .
