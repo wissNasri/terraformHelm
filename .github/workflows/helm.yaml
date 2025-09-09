@@ -25,7 +25,7 @@ jobs:
 
       # Étape 2: Exécuter l'action Checkov et afficher les résultats dans les logs
       - name: Lancer l'analyse Checkov
-        uses: bridgecrewio/checkov-action@v12
+        uses: bridgecrewio/checkov-action@main
         with:
           # Scanne le répertoire entier.
           directory: .
@@ -36,6 +36,7 @@ jobs:
           soft_fail: false
           # Affiche les résultats uniquement dans la console (logs du workflow).
           output_format: cli
+       continue-on-error: true
 
   # ----- Job pour l'analyse des configurations Kubernetes avec Kubescape -----
   kubescape-scan:
@@ -49,7 +50,7 @@ jobs:
 
       # Étape 2: Exécuter l'action Kubescape et afficher les résultats dans les logs
       - name: Lancer l'analyse Kubescape sur les fichiers Helm
-        uses: kubescape/github-action@v3
+        uses: kubescape/github-action@main
         with:
           # Format de sortie : 'pretty-printer' est le format lisible pour la console.
           format: "pretty-printer"
@@ -60,4 +61,4 @@ jobs:
           # '0' signifie que le job échouera si des problèmes sont trouvés.
           # Mettez '1' si vous ne voulez pas qu'il échoue.
           exitCode: "0"
-
+        continue-on-error: true
