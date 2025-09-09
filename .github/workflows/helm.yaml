@@ -36,7 +36,6 @@ jobs:
           soft_fail: false
           # Affiche les résultats uniquement dans la console (logs du workflow).
           output_format: cli
-       continue-on-error: true
 
   # ----- Job pour l'analyse des configurations Kubernetes avec Kubescape -----
   kubescape-scan:
@@ -61,4 +60,3 @@ jobs:
           # '0' signifie que le job échouera si des problèmes sont trouvés.
           # Mettez '1' si vous ne voulez pas qu'il échoue.
           exitCode: "0"
-        continue-on-error: true
