@@ -18,7 +18,7 @@ jobs:
       - name: Run Checkov scan 
         uses: bridgecrewio/checkov-action@master   
         with:
-          directory: .
+          directory: ./terraform/apps/
           framework: kubernetes
           output_format: json
           output_file_path: ./checkov-report.json
