@@ -18,7 +18,6 @@ jobs:
           framework: "ALL"
           output_format: json
           output_file_path: ./checkov-report.json
-          quiet: true
         continue-on-error: true
 
       - name: Upload Checkov JSON report
