@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Checkov (Terraform & JSON)
-        uses: bridgecrewio/checkov-action@v23
+        uses: bridgecrewio/checkov-action@master
         with:
           directory: .
           output_format: json
