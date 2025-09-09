@@ -1,32 +1,23 @@
-name: IaC Security Scan
+name: Security Scan with Checkov
 
 on:
   push:
     branches:
       - main
   pull_request:
-    branches:
-      - main
 
 jobs:
-   k8s-manifest-scan:
+  checkov-scan:
     runs-on: ubuntu-latest
     steps:
+      # 1️⃣ Checkout du dépôt
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Checkov scan 
-        uses: bridgecrewio/checkov-action@master   
+      # 2️⃣ Lancer Checkov sur tout le dépôt
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v11
         with:
-          directory: ./terraform/apps/
-          framework: kubernetes
-          output_format: json
-          output_file_path: ./checkov-report.json
-          quiet: true
-        continue-on-error: true
-
-      - name: Upload Checkov JSON report
-        uses: actions/upload-artifact@v4
-        with:
-          name: checkov-report
-          path: ./checkov-report.json
+          directory: ./      # Analyse tout le repo
+          framework: 'all'   # Terraform, Kubernetes, CloudFormation, etc.
+        continue-on-error: true   # Ne bloque pas le pipeline si Checkov trouve des vulnérabilités
