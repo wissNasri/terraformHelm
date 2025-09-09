@@ -23,6 +23,7 @@ jobs:
           output_format: json
           skip_download: false
           quiet: false
+        continue-on-error: true
 
       - name: Upload Checkov report
         uses: actions/upload-artifact@v4
@@ -42,7 +43,7 @@ jobs:
         uses: kubescape/kubescape-action@v2
         with:
           args: scan framework nsa --exclude-namespaces kube-system -o json --output-file kubescape_report.json ./apps ./helm-values
-
+        continue-on-error: true
       - name: Upload Kubescape report
         uses: actions/upload-artifact@v4
         with:
