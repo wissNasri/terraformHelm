@@ -9,17 +9,16 @@ on:
       - main
 
 jobs:
-  checkov-scan:
-    name: Checkov Terraform & JSON Scan
+   k8s-manifest-scan:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Checkov scan (JSON report)
+      - name: Run Checkov scan 
         uses: bridgecrewio/checkov-action@master   
         with:
-          directory: ./terraform
+          directory: .
           framework: kubernetes
           output_format: json
           output_file_path: ./checkov-report.json
@@ -31,22 +30,3 @@ jobs:
         with:
           name: checkov-report
           path: ./checkov-report.json
-
-  kubescape-scan:
-    name: Kubescape Kubernetes YAML Scan
-    runs-on: ubuntu-latest
-    needs: checkov-scan
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Run Kubescape Scan
-        uses: kubescape/kubescape-action@main
-        with:
-          args: scan framework nsa --exclude-namespaces kube-system -o json --output-file kubescape_report.json ./terraform/apps/helm-values
-        continue-on-error: true
-      - name: Upload Kubescape report
-        uses: actions/upload-artifact@v4
-        with:
-          name: kubescape-report
-          path: kubescape_report.json
