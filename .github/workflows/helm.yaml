@@ -16,20 +16,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Checkov (Terraform & JSON)
-        uses: bridgecrewio/checkov-action@master
+      - name: Run Checkov scan (JSON report)
+        uses: bridgecrewio/checkov-action@master   
         with:
           directory: .
+          framework: kubernetes
           output_format: json
-          skip_download: false
-          quiet: false
+          output_file_path: ./checkov-report.json
+          quiet: true
         continue-on-error: true
 
-      - name: Upload Checkov report
+      - name: Upload Checkov JSON report
         uses: actions/upload-artifact@v4
         with:
           name: checkov-report
-          path: checkov_report.json
+          path: ./checkov-report.json
 
   kubescape-scan:
     name: Kubescape Kubernetes YAML Scan
@@ -40,7 +41,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Kubescape Scan
-        uses: kubescape/kubescape-action@v2
+        uses: kubescape/kubescape-action@main
         with:
           args: scan framework nsa --exclude-namespaces kube-system -o json --output-file kubescape_report.json ./apps ./helm-values
         continue-on-error: true
