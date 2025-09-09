@@ -19,7 +19,7 @@ jobs:
       - name: Run Checkov scan (JSON report)
         uses: bridgecrewio/checkov-action@master   
         with:
-          directory: .
+          directory: ./terraform
           framework: kubernetes
           output_format: json
           output_file_path: ./checkov-report.json
@@ -43,7 +43,7 @@ jobs:
       - name: Run Kubescape Scan
         uses: kubescape/kubescape-action@main
         with:
-          args: scan framework nsa --exclude-namespaces kube-system -o json --output-file kubescape_report.json ./apps ./helm-values
+          args: scan framework nsa --exclude-namespaces kube-system -o json --output-file kubescape_report.json ./terraform/apps/helm-values
         continue-on-error: true
       - name: Upload Kubescape report
         uses: actions/upload-artifact@v4
