@@ -14,17 +14,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Lancer Checkov sur tout le dépôt et générer un rapport JSON
+      # 2️⃣ Lancer Checkov sur tout le dépôt avec JSON
       - name: Run Checkov
         uses: bridgecrewio/checkov-action@v11
         with:
-          directory: ./      # Analyse tout le repo
-          framework: 'all'   # Terraform, Kubernetes, CloudFormation, etc.
-          output: 'json'     # Générer un rapport JSON
-          quiet: false
-        continue-on-error: true   # Ne bloque pas le pipeline si vulnérabilités
+          directory: ./             # Analyse tout le repo
+          args: "--output json --output-file checkov-report.json --download-external-modules" 
+        continue-on-error: true      # ⚡ Ne bloque pas le pipeline si des vulnérabilités sont détectées
 
-      # 3️⃣ Upload du rapport JSON comme artifact
+      # 3️⃣ Upload du rapport JSON
       - name: Upload Checkov JSON Report
         if: always()
         uses: actions/upload-artifact@v4
