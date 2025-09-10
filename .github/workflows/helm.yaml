@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   checkov-scan:
     name: Run Checkov
@@ -20,4 +24,12 @@ jobs:
           directory: .
           quiet: true
           framework: terraform,kubernetes,helm
-          soft_fail: true   # ✅ le job ne casse pas ton pipeline
+          soft_fail: true
+          output_format: sarif
+          output_file_path: reports/checkov_report
+
+      - name: Upload Checkov SARIF report
+        if: success() || failure()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/checkov_report.sarif
