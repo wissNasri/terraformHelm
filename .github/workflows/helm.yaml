@@ -12,7 +12,7 @@ on:
 
 permissions:
   contents: read
-  security-events: write   # <--- Permission nécessaire pour upload-sarif
+  security-events: write
 
 jobs:
   checkov-scan:
@@ -24,11 +24,11 @@ jobs:
       - name: Run Checkov
         uses: bridgecrewio/checkov-action@v12
         with:
-          output_format: cli,sarif
-          output_file_path: results.sarif
+          output_format: cli,json       # <--- Génère du JSON
+          output_file_path: results.json
 
-      - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+      - name: Upload Checkov JSON as artifact
+        uses: actions/upload-artifact@v3
         with:
-          sarif_file: results.sarif
+          name: checkov-results
+          path: results.json
