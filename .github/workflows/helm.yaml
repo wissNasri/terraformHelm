@@ -14,22 +14,21 @@ jobs:
       security-events: write
 
     steps:
-      # Étape 1 : Récupérer le code
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # Étape 2 : Exécuter Checkov
-      - name: Run Checkov Scan
-        uses: bridgecrewio/checkov-action@v11
+      - name: Run Checkov scan (JSON report)
+        uses: bridgecrewio/checkov-action@master   
         with:
-          directory: ./terraform   # dossier Terraform à analyser
-          output: checkov_report.json
-          soft_fail: true          # le workflow continue même si des échecs
-          quiet: false
+          directory: ./terraform
+          framework: "ALL"
+          output_format: json
+          output_file_path: ./checkov-report.json
+          quiet: true
+        continue-on-error: true
 
-      # Étape 3 : Upload du rapport JSON comme artefact
-      - name: Upload Checkov JSON Report
+      - name: Upload Checkov JSON report
         uses: actions/upload-artifact@v4
         with:
           name: checkov-report
-          path: checkov_report.json
+          path: ./checkov-report.json
