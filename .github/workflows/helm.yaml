@@ -21,7 +21,7 @@ jobs:
         uses: bridgecrewio/checkov-action@master   
         with:
           directory: ./terraform
-          framework: "ALL"
+          framework: "all"
           output_format: json
           output_file_path: ./checkov-report.json
           quiet: true
