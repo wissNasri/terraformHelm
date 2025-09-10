@@ -1,37 +1,33 @@
-name: IaC Security Scan (Checkov)
+name: Checkov Scan
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
+push:
+branches:
+- main
+- master
+pull_request:
+branches:
+- main
+- master
 
 jobs:
-  checkov-scan:
-    name: Run Checkov
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+scan:
+runs-on: ubuntu-latest
+steps:
+# Step 1: Check out the repository
+- name: Checkout repository
+uses: actions/checkout@v3
 
-      - name: Run Checkov (Terraform & Helm/K8s YAML)
-        uses: bridgecrewio/checkov-action@v12
-        with:
-          directory: .
-          quiet: true
-          framework: terraform,kubernetes,helm
-          soft_fail: true
-          output_format: cli,json,sarif
-          output_file_path: reports/checkov_report
+# Step 2: Run Checkov
+- name: Run Checkov
+uses: bridgecrewio/checkov-action@v12
+with:
+output_format: cli,sarif
+output_file_path: console,results.sarif
 
-      - name: Upload Checkov JSON report as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: checkov-json-report
-          path: reports/checkov_report.json
-
-      - name: Upload Checkov SARIF report (if exists)
-        if: success() || failure()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: reports/checkov_report.sarif
+# Step 3: Upload SARIF results to GitHub Security tab
+- name: Upload SARIF file
+uses: github/codeql-action/upload-sarif@v2
+if: success() || failure()
+with:
+sarif_file: results.sarif
