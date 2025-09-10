@@ -1,27 +1,36 @@
-name: Security Scan with Checkov
+name: IaC Security Scan (Checkov)
 
 on:
+  pull_request:
   push:
     branches:
       - main
-  pull_request:
 
 jobs:
   checkov-scan:
+    name: Run Checkov
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Run Checkov scan (JSON report)
-        uses: bridgecrewio/checkov-action@master   
+      - name: Run Checkov (Terraform & Helm/K8s YAML)
+        uses: bridgecrewio/checkov-action@v12
         with:
-          directory: ./
-          framework: "ALL"
-          output_format: json
-          output_file_path: ./checkov-report.json
-        continue-on-error: true
+          directory: .
+          quiet: true
+          framework: terraform,kubernetes,helm
+          soft_fail: true   # ✅ n'échoue pas le pipeline si des erreurs sont trouvées
+          output_format: cli,sarif,json
+          output_file_path: reports/checkov_report
 
-      - name: Upload Checkov JSON report
+      - name: Upload Checkov SARIF report to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/checkov_report.sarif
+
+      - name: Upload Checkov JSON report as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: checkov-report
-          path: ./checkov-report.json
+          name: checkov-json-report
+          path: reports/checkov_report.json
