@@ -22,8 +22,8 @@ jobs:
         with:
           directory: ./terraform
           framework: "all"
-          output_format: json
-          output_file_path: ./checkov-report.json
+          output_format: html
+          output_file_path: ./checkov-report.html
           quiet: true
         continue-on-error: true
 
@@ -31,4 +31,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: checkov-report
-          path: ./checkov-report.json
+          path: ./checkov-report.html
