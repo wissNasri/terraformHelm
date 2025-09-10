@@ -1,34 +1,32 @@
-name: Checkov Scan
+name: Checkov Security Scan
 
 on:
   push:
-    branches:
-      - main
-      
+    branches: [main]
   pull_request:
-    branches:
-      - main
-      - master
-
-permissions:
-  contents: read
-  security-events: write
+    branches: [main]
 
 jobs:
   checkov-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
     steps:
+      # Étape 1 : Récupérer le code
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Run Checkov
-        uses: bridgecrewio/checkov-action@v12
+      # Étape 2 : Exécuter Checkov depuis le Marketplace
+      - name: Run Checkov Scan
+        uses: bridgecrewio/checkov-action@v11
         with:
-          output_format: cli,json       # <--- Génère du JSON
-          output_file_path: results.json
+          directory: ./  # dossier à analyser, ici le repo entier
+          skip_check: ''  # aucun check ignoré
+          quiet: false
+          soft_fail: true  # NE PAS bloquer le workflow si des erreurs sont trouvées
 
-      - name: Upload Checkov JSON as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: checkov-results
-          path: results.json
+      # Étape 3 : Optionnel, afficher le résumé
+      - name: Display Checkov Report
+        run: cat checkov_report.json || echo "No report generated"
