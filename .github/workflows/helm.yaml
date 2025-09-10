@@ -20,17 +20,18 @@ jobs:
           directory: .
           quiet: true
           framework: terraform,kubernetes,helm
-          soft_fail: true   # ✅ n'échoue pas le pipeline si des erreurs sont trouvées
-          output_format: cli,sarif,json
+          soft_fail: true
+          output_format: cli,json,sarif
           output_file_path: reports/checkov_report
-
-      - name: Upload Checkov SARIF report to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: reports/checkov_report.sarif
 
       - name: Upload Checkov JSON report as artifact
         uses: actions/upload-artifact@v4
         with:
           name: checkov-json-report
           path: reports/checkov_report.json
+
+      - name: Upload Checkov SARIF report (if exists)
+        if: success() || failure()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/checkov_report.sarif
