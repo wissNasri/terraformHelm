@@ -1,37 +1,36 @@
-name: IaC Security Scan (Checkov)
+name: Secret Scan (Gitleaks)
 
 on:
-  pull_request:
   push:
     branches:
       - main
+  pull_request:
 
-
+permissions:
+  contents: read
+  security-events: write
 
 jobs:
-
-
-  kubescape:
+  gitleaks-scan:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
-
     steps:
-    - uses: actions/checkout@v3
-    - uses: kubescape/github-action@main
-      continue-on-error: true
-      with:
-        format: sarif
-        outputFile: results
-        # # Optional: Specify the Kubescape Portal credentials 
-        # account: ${{secrets.KUBESCAPE_ACCOUNT}}
-        # accessKey: ${{secrets.KUBESCAPE_ACCESS_KEY}}
-        # server: ${{ vars.KUBESCAPE_SERVER }}
-        # # Optional: Scan a specific path. Default will scan the whole repository
-        files: "./terraform"
-    - name: Upload Kubescape scan results to Github Code Scanning
-      uses: github/codeql-action/upload-sarif@v2
-      with:
-        sarif_file: results.sarif
+      # 1️⃣ Checkout le repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2️⃣ Exécuter Gitleaks via Marketplace
+      - name: Run Gitleaks scan
+        uses: zricethezav/gitleaks-action@v2
+        with:
+          format: sarif          # Générer un rapport SARIF compatible GitHub
+          output: gitleaks.sarif
+          verbose: true
+          redacted: false        # Pour ne pas masquer les secrets trouvés
+          # Optional: chemin spécifique à scanner
+          # path: "terraform/apps"
+
+      # 3️⃣ Upload du rapport SARIF vers GitHub
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gitleaks.sarif
