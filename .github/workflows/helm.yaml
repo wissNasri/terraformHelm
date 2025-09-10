@@ -28,7 +28,7 @@ jobs:
           output_file_path: results.json
 
       - name: Upload Checkov JSON as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: checkov-results
           path: results.json
