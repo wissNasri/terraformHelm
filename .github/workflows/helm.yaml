@@ -18,17 +18,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Étape 2 : Exécuter Checkov depuis le Marketplace
+      # Étape 2 : Exécuter Checkov
       - name: Run Checkov Scan
         uses: bridgecrewio/checkov-action@v11
         with:
-          directory: ./          # dossier à analyser
-          output: checkov_report.json  # nom du rapport JSON
-          soft_fail: true         # ne bloque pas le workflow
+          directory: ./terraform   # dossier Terraform à analyser
+          output: checkov_report.json
+          soft_fail: true          # le workflow continue même si des échecs
+          quiet: false
 
       # Étape 3 : Upload du rapport JSON comme artefact
-      - name: Upload Checkov Report
-        uses: actions/upload-artifact@v4
+      - name: Upload Checkov JSON Report
+        uses: actions/upload-artifact@v3
         with:
           name: checkov-report
           path: checkov_report.json
