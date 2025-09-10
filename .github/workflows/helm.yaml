@@ -22,11 +22,13 @@ jobs:
       - name: Run Checkov Scan
         uses: bridgecrewio/checkov-action@v11
         with:
-          directory: ./  # dossier à analyser, ici le repo entier
-          skip_check: ''  # aucun check ignoré
-          quiet: false
-          soft_fail: true  # NE PAS bloquer le workflow si des erreurs sont trouvées
+          directory: ./          # dossier à analyser
+          output: checkov_report.json  # nom du rapport JSON
+          soft_fail: true         # ne bloque pas le workflow
 
-      # Étape 3 : Optionnel, afficher le résumé
-      - name: Display Checkov Report
-        run: cat checkov_report.json || echo "No report generated"
+      # Étape 3 : Upload du rapport JSON comme artefact
+      - name: Upload Checkov Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: checkov-report
+          path: checkov_report.json
