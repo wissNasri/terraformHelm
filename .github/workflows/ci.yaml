@@ -1,0 +1,74 @@
+# Nom du fichier : .github/workflows/deploy-addons.yml
+# Ce fichier doit être dans le dépôt terraformHelm
+
+name: "APPS: Deploy Kubernetes Add-ons"
+
+on:
+  # Se déclenche quand vous poussez du code dans le dossier terraform/
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/deploy-addons.yml'
+      
+  # Permet aussi de lancer le déploiement manuellement
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: "Terraform Plan & Apply for Add-ons"
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write  # Nécessaire pour l'authentification OIDC vers AWS
+      contents: read   # Nécessaire pour lire le code de ce dépôt
+
+    defaults:
+      run:
+        shell: bash
+        # Le répertoire de travail par défaut pour toutes les commandes terraform
+        working-directory: ./terraform/apps
+
+    steps:
+    # Étape 1: Récupérer le code du dépôt terraformHelm
+    - name: Checkout source code
+      uses: actions/checkout@v4
+
+    # Étape 2: Configurer les identifiants AWS via OIDC
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        # Le même rôle que celui utilisé par le pipeline d'infrastructure
+        role-to-assume: arn:aws:iam::228578233417:role/oicd
+        aws-region: us-east-1 # La région de votre cluster EKS
+
+    # Étape 3: Configurer l'accès à EKS pour kubectl et Terraform
+    # Cette étape est la clé : elle connecte le runner au cluster.
+    - name: Configure Kubeconfig for EKS
+      # On exécute cette commande depuis la racine, donc on ne spécifie pas de working-directory
+      shell: bash 
+      run: |
+        echo "Configuring access to EKS cluster..."
+        aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
+        echo "Kubeconfig configured successfully!"
+      # IMPORTANT: "tws-eks-cluster" doit être le nom exact de votre cluster.
+      # Vous pouvez le trouver dans les outputs de votre pipeline iac.
+
+    # Étape 4: Terraform Init
+    # Cette commande s'exécute dans le working-directory: ./terraform/apps
+    - name: Terraform Init
+      id: init
+      run: terraform init
+
+    # Étape 5: Terraform Plan
+    # Le plan s'exécute toujours pour valider les changements
+    - name: Terraform Plan
+      id: plan
+      run: terraform plan -no-color -out=planfile
+
+    # Étape 6: Terraform Apply (uniquement sur déclenchement manuel)
+    # On garde la même sécurité : on n'applique que si c'est demandé manuellement.
+    - name: Terraform Apply
+      if: github.event_name == 'workflow_dispatch'
+      run: terraform apply -auto-approve -input=false planfile
