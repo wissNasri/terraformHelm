@@ -61,6 +61,7 @@ jobs:
       id: init
       run: terraform init
 
+
     # Étape 5: Terraform Plan
     # Le plan s'exécute toujours pour valider les changements
     - name: Terraform Plan
