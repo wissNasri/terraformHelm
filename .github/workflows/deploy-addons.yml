@@ -1,20 +1,34 @@
 # Nom du fichier : .github/workflows/deploy-addons.yml
 # Ce fichier doit être dans le dépôt terraformHelm
 
-name: "APPS: Deploy Kubernetes Add-ons"
+name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
+  # Se déclenche sur un push pour valider le code (plan uniquement)
   push:
     branches:
       - main
     paths:
       - 'terraform/**'
       - '.github/workflows/deploy-addons.yml'
+      
+  # ===================================================================
+  # MODIFICATION 1: Ajout d'entrées pour le déclenchement manuel
+  # ===================================================================
   workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action à exécuter : "apply" pour déployer, "destroy" pour supprimer'
+        required: true
+        default: 'apply'
+        type: choice
+        options:
+        - apply
+        - destroy
 
 jobs:
   deploy:
-    name: "Terraform Plan & Apply for Add-ons"
+    name: "Terraform Plan, Apply & Destroy for Add-ons"
     runs-on: ubuntu-latest
 
     permissions:
@@ -30,9 +44,6 @@ jobs:
     - name: Checkout source code
       uses: actions/checkout@v4
 
-    # ===================================================================
-    #                ÉTAPE MANQUANTE À AJOUTER ICI
-    # ===================================================================
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
@@ -55,10 +66,31 @@ jobs:
       id: init
       run: terraform init
 
+    # ===================================================================
+    # MODIFICATION 2: Le plan de destruction est différent
+    # ===================================================================
     - name: Terraform Plan
       id: plan
+      # Le plan normal s'exécute pour les push et les apply manuels
+      if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
       run: terraform plan -no-color -out=planfile
 
+    - name: Terraform Plan (for Destroy)
+      id: plan-destroy
+      # Un plan de destruction s'exécute si l'action est "destroy"
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+      run: terraform plan -destroy -no-color -out=destroyplan
+
+    # ===================================================================
+    # MODIFICATION 3: L'Apply est maintenant conditionné par l'input
+    # ===================================================================
     - name: Terraform Apply
-      if: github.event_name == 'workflow_dispatch'
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
       run: terraform apply -auto-approve -input=false planfile
+
+    # ===================================================================
+    # MODIFICATION 4: Ajout de l'étape de destruction sécurisée
+    # ===================================================================
+    - name: Terraform Destroy (DANGEROUS)
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+      run: terraform destroy -auto-approve
