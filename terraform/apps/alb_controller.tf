@@ -4,6 +4,7 @@ resource "aws_iam_policy" "alb_policy" {
   policy = file("${path.module}/iam_policy.json") # Assurez-vous que ce fichier existe
 }
 
+
 module "iam_assumable_role_with_oidc_alb" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   version = "~> 2.0"
