@@ -1,5 +1,5 @@
 resource "aws_iam_policy" "alb_policy" {
-  name   = "AWSLoadBalancerControllerIAMPolicy"
+  name_prefix = "alb-policy-"
   path   = "/"
   policy = file("${path.module}/iam_policy.json") # Assurez-vous que ce fichier existe
 }
