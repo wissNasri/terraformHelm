@@ -1,4 +1,24 @@
 terraform {
+  # Backend pour stocker l'état des applications (add-ons)
+  backend "s3" {
+    # Le même bucket que pour l'infrastructure
+    bucket = "terraform-s3-backend-tws-hackathon111" 
+    
+    # ===================================================================
+    #              LA CLÉ DU SUCCÈS EST ICI
+    # Un chemin différent pour le fichier d'état de ce projet.
+    # ===================================================================
+    key    = "apps/terraform.tfstate"
+    
+    region = "us-east-1"
+    
+    # On utilise la même table DynamoDB pour le verrouillage
+    dynamodb_table = "terraform-locks"
+    encrypt        = true
+  }
+
+
+terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
