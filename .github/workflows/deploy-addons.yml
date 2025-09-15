@@ -34,7 +34,6 @@ jobs:
   deploy:
     name: "Terraform Plan, Apply & Destroy for Add-ons"
     runs-on: ["self-hosted", "aws-private-runner"]
-
     permissions:
       id-token: write
       contents: read
