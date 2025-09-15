@@ -5,6 +5,7 @@ name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
 
+
   # Se déclenche sur un push pour valider le code (plan uniquement)
   push:
     branches:
