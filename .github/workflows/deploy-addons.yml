@@ -7,6 +7,7 @@
 #    qui est une instance EC2 dans le même VPC que le cluster EKS.
 #
 # 2. AUTHENTIFICATION : L'authentification auprès d'AWS est gérée NATIVEMENT
+
 #    par le rôle IAM attaché à l'instance EC2. Il n'y a PAS BESOIN d'OIDC
 #    ni de clés d'accès (Access Keys).
 
