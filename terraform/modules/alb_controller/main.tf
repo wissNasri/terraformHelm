@@ -1,29 +1,9 @@
 # Fichier : terraformHelm/modules/alb_controller/main.tf (Version Finale)
 
-# --- DÉCLARATION DES VARIABLES ---
-
-# ... (gardez toutes vos variables existantes : app, namespace, etc.)
-variable "app" { type = any }
-variable "namespace" { type = string }
-variable "repository" { type = string }
-variable "repository_config" { type = any; default = {} }
-variable "values" { type = list(string); default = [] }
-variable "set" { type = any; default = [] }
-variable "set_sensitive" { type = any; default = [] }
-
-# --- AJOUTEZ CETTE NOUVELLE VARIABLE ---
-variable "wait_for_completion" {
-  description = "Si Terraform doit attendre la fin des opérations Helm (true/false)."
-  type        = bool
-  default     = true # Par défaut, on attend.
-}
-# ------------------------------------
-
-
-# --- RESSOURCE HELM ---
+# CE FICHIER NE CONTIENT PLUS AUCUNE DÉCLARATION DE VARIABLE.
+# IL UTILISE CELLES DÉFINIES DANS variables.tf.
 
 resource "helm_release" "this" {
-  # ... (tous les arguments du début restent les mêmes : count, namespace, etc.) ...
   count                      = var.app["deploy"] ? 1 : 0
   namespace                  = var.namespace
   repository                 = var.repository
@@ -38,11 +18,11 @@ resource "helm_release" "this" {
   force_update               = lookup(var.app, "force_update", false)
   description                = lookup(var.app, "description", null)
   
-  # --- REMPLACEZ L'ANCIENNE LIGNE 'wait' PAR CELLE-CI ---
+  # --- CORRECTION ---
+  # On utilise notre nouvelle variable déclarée dans variables.tf
   wait                       = var.wait_for_completion
-  # ----------------------------------------------------
+  # ------------------
 
-  # ... (tous les autres arguments jusqu'à la fin restent les mêmes : recreate_pods, timeout, etc.) ...
   recreate_pods              = lookup(var.app, "recreate_pods", true)
   max_history                = lookup(var.app, "max_history", 0)
   lint                       = lookup(var.app, "lint", true)
