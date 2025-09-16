@@ -13,9 +13,9 @@ module kibana {
     wait          = false
     recreate_pods = false
     deploy        = 1
-    timeout = 900
     disable_hooks = true
   }
+  timeout = 900
   values = [file("${path.module}/helm-values/kibana.yaml")]
   wait_for_completion = false
   
