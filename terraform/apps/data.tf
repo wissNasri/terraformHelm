@@ -5,6 +5,7 @@ data "aws_eks_cluster" "cluster" {
   name = var.eks_cluster_name
 }
 
+
 # Récupère l'URL du fournisseur OIDC du cluster
 # L'URL est extraite et le "https://" est retiré
 data "aws_iam_openid_connect_provider" "oidc_provider" {
