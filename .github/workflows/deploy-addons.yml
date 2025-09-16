@@ -8,6 +8,7 @@
 #
 # 2. AUTHENTIFICATION : L'authentification auprès d'AWS est gérée NATIVEMENT
 
+
 #    par le rôle IAM attaché à l'instance EC2. Il n'y a PAS BESOIN d'OIDC
 #    ni de clés d'accès (Access Keys).
 
