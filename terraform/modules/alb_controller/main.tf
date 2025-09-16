@@ -1,3 +1,10 @@
+variable "wait_for_completion" {
+  description = "Détermine si Terraform doit attendre la fin de l'opération Helm."
+  type        = bool
+  default     = true # Par défaut, on attend toujours.
+}
+
+
 resource "helm_release" "this" {
   count                      = var.app["deploy"] ? 1 : 0
   namespace                  = var.namespace
@@ -47,4 +54,6 @@ resource "helm_release" "this" {
       value = set_sensitive.value.value
     }
   }
+  wait = var.wait_for_completion
+
 }
