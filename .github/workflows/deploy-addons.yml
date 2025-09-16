@@ -10,6 +10,7 @@ on:
   # Se déclenche sur un push pour valider le code (plan uniquement)
   push:
 
+
   
     branches:
       - main
