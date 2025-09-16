@@ -6,6 +6,7 @@
 # 1. EXÉCUTION : Ce workflow s'exécute sur le RUNNER AUTO-HÉBERGÉ (self-hosted)
 #    qui est une instance EC2 dans le même VPC que le cluster EKS.
 #
+
 # 2. AUTHENTIFICATION : L'authentification auprès d'AWS est gérée NATIVEMENT
 
 
