@@ -1,29 +1,29 @@
-# Fichier : terraformHelm/modules/alb_controller/variables.tf (Version Finale)
+# Fichier : terraform/modules/helm_app/variables.tf
 
 variable "namespace" {
-  description = "namespace where to deploy an application"
+  description = "Namespace où déployer l'application."
   type        = string
 }
 
 variable "app" {
-  description = "an application to deploy"
+  description = "Une application à déployer."
   type        = map(any)
 }
 
 variable "repository_config" {
-  description = "repository configuration"
+  description = "Configuration du dépôt."
   type        = map(any)
   default     = {}
 }
 
 variable "values" {
-  description = "Extra values"
+  description = "Valeurs supplémentaires pour le chart."
   type        = list(string)
   default     = []
 }
 
 variable "set" {
-  description = "Value block with custom STRING values to be merged with the values yaml."
+  description = "Bloc de valeurs avec des chaînes de caractères personnalisées."
   type = list(object({
     name  = string
     value = string
@@ -32,7 +32,7 @@ variable "set" {
 }
 
 variable "set_sensitive" {
-  description = "Value block with custom sensitive values to be merged with the values yaml that won't be exposed in the plan's diff."
+  description = "Bloc de valeurs sensibles qui ne seront pas affichées dans le plan."
   type = list(object({
     path  = string
     value = string
@@ -41,14 +41,18 @@ variable "set_sensitive" {
 }
 
 variable "repository" {
-  description = "Helm repository"
+  description = "Dépôt Helm."
   type        = string
 }
 
-# --- AJOUT DE LA NOUVELLE VARIABLE DE CONTRÔLE ---
 variable "wait_for_completion" {
-  description = "Si Terraform doit attendre la fin des opérations Helm (true/false)."
+  description = "Indique si Terraform doit attendre la fin des opérations Helm (true/false)."
   type        = bool
-  default     = true # Par défaut, on attend.
+  default     = true # Par défaut, on attend toujours. C'est plus sûr.
 }
-# ------------------------------------------------
+
+variable "timeout" {
+  description = "Délai d'attente en secondes pour les opérations Helm."
+  type        = number
+  default     = 300 # 5 minutes par défaut
+}
