@@ -18,4 +18,6 @@ module kibana {
   }
   values = [file("${path.module}/helm-values/kibana.yaml")]
   wait_for_completion = false
+  
+  depends_on = [module.elasticsearch]
 }
