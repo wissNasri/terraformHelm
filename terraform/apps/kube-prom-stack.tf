@@ -13,6 +13,7 @@ module kube-prom-stack {
     wait          = false
     recreate_pods = false
     deploy        = 1
+    timeout = 900
   }
   values = [file("${path.module}/helm-values/kube-prom-stack.yaml")]
   depends_on = [module.alb_controller]
