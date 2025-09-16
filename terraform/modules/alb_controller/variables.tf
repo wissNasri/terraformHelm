@@ -1,3 +1,5 @@
+# Fichier : terraformHelm/modules/alb_controller/variables.tf (Version Finale)
+
 variable "namespace" {
   description = "namespace where to deploy an application"
   type        = string
@@ -42,3 +44,11 @@ variable "repository" {
   description = "Helm repository"
   type        = string
 }
+
+# --- AJOUT DE LA NOUVELLE VARIABLE DE CONTRÔLE ---
+variable "wait_for_completion" {
+  description = "Si Terraform doit attendre la fin des opérations Helm (true/false)."
+  type        = bool
+  default     = true # Par défaut, on attend.
+}
+# ------------------------------------------------
