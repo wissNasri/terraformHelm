@@ -1,18 +1,27 @@
-
 # Nom du fichier : .github/workflows/deploy-addons.yml
-# VERSION CORRIGÉE ET FINALE
+# DESCRIPTION : Pipeline pour déployer les add-ons Kubernetes (Helm charts)
+#               via Terraform.
+#
+# LOGIQUE CLÉ :
+# 1. EXÉCUTION : Ce workflow s'exécute sur le RUNNER AUTO-HÉBERGÉ (self-hosted)
+#    qui est une instance EC2 dans le même VPC que le cluster EKS.
+#
+# 2. AUTHENTIFICATION : L'authentification auprès d'AWS est gérée NATIVEMENT
+#    par le rôle IAM attaché à l'instance EC2. Il n'y a PAS BESOIN d'OIDC
+#    ni de clés d'accès (Access Keys).
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
+  # Se déclenche sur un push vers la branche main si les fichiers des add-ons changent
   push:
-  
     branches:
       - main
     paths:
-      - 'terraform/**'
+      - 'terraform/apps/**' # Cible le répertoire des add-ons
       - '.github/workflows/deploy-addons.yml'
-      
+
+  # Permet un déclenchement manuel depuis l'interface GitHub
   workflow_dispatch:
     inputs:
       action:
@@ -21,66 +30,68 @@ on:
         default: 'apply'
         type: choice
         options:
-        - apply
-        - destroy
+          - apply
+          - destroy
 
 jobs:
-  deploy:
-    name: "Terraform Plan, Apply & Destroy for Add-ons"
-    runs-on: ["self-hosted", "aws-private-runner"]
+  deploy-addons:
+    name: "Terraform for Kubernetes Add-ons"
     
-    permissions:
-      id-token: write
-      contents: read
+    # Cible le runner auto-hébergé que vous avez provisionné
+    runs-on: ["self-hosted", "aws-private-runner"]
+
+    # La section "permissions" est inutile ici car nous n'utilisons pas OIDC.
+    # Le runner s'authentifie via son rôle IAM d'instance.
 
     defaults:
       run:
         shell: bash
+        # Le répertoire de travail pour toutes les commandes de cette pipeline
         working-directory: ./terraform/apps
 
     steps:
-    - name: Checkout source code
-      uses: actions/checkout@v4
+      # Étape 1 : Récupérer le code du dépôt
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::228578233417:role/oicd
-        aws-region: us-east-1
+      # Étape 2 : Configurer l'accès à Kubernetes
+      # La CLI AWS va automatiquement utiliser le rôle IAM de l'instance EC2.
+      # EKS autorisera la connexion car ce rôle IAM est listé dans les "access_entries" du cluster.
+      - name: Configure Kubeconfig for EKS
+        run: |
+          echo "Configuring kubectl to connect to EKS cluster..."
+          aws eks update-kubeconfig \
+            --region us-east-1 \
+            --name tws-eks-cluster
+          echo "Kubeconfig configured successfully!"
+          
+          echo "--- Verifying cluster access ---"
+          kubectl get nodes -o wide
+          echo "--------------------------------"
 
-    # ===================================================================
-    # --- CORRECTION APPLIQUÉE ICI ---
-    # ===================================================================
-    - name: Configure Kubeconfig for EKS
-      shell: bash 
-      run: |
-        echo "Configuring access to EKS cluster using OIDC role..."
-        # On force l'utilisation du rôle OIDC pour la configuration de kubectl.
-        # C'est la correction la plus importante pour résoudre l'erreur "Unauthorized".
-        aws eks update-kubeconfig \
-          --region us-east-1 \
-          --name tws-eks-cluster \
-          --role-arn arn:aws:iam::228578233417:role/oicd
-        echo "Kubeconfig configured successfully!"
+      # Étape 3 : Initialiser Terraform
+      # Le provider AWS de Terraform va aussi détecter et utiliser le rôle IAM de l'instance.
+      # Les providers Helm et Kubernetes utiliseront le fichier ~/.kube/config généré à l'étape précédente.
+      - name: Terraform Init
+        id: init
+        run: terraform init
 
-    - name: Terraform Init
-      id: init
-      run: terraform init
+      # Étape 4 : Générer un plan Terraform
+      # Cette étape s'exécute pour les push et les apply manuels.
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -out=planfile
 
-    - name: Terraform Plan
-      id: plan
-      if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
-      run: terraform plan -no-color -out=planfile
+      # Étape 5 : Appliquer les changements (uniquement sur déclenchement manuel)
+      # Installe ou met à jour les charts Helm sur le cluster.
+      - name: Terraform Apply
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+        run: terraform apply -auto-approve -input=false planfile
 
-    - name: Terraform Plan (for Destroy)
-      id: plan-destroy
-      if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
-      run: terraform plan -destroy -no-color -out=destroyplan
-
-    - name: Terraform Apply
-      if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
-      run: terraform apply -auto-approve -input=false planfile
-
-    - name: Terraform Destroy (DANGEROUS)
-      if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
-      run: terraform destroy -auto-approve
+      # Étape 6 : Détruire les ressources (uniquement sur déclenchement manuel)
+      # Supprime les charts Helm du cluster.
+      - name: Terraform Destroy (DANGEROUS)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+        run: |
+          echo "WARNING: Preparing to destroy all add-ons managed by Terraform."
+          terraform destroy -auto-approve
