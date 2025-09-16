@@ -1,29 +1,16 @@
 # Nom du fichier : .github/workflows/deploy-addons.yml
-# Ce fichier doit être dans le dépôt terraformHelm
+# VERSION CORRIGÉE ET FINALE
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
-
-
 on:
-
-
-
-  # Se déclenche sur un push pour valider le code (plan uniquement)
   push:
-
-
-  
     branches:
       - main
-      
     paths:
       - 'terraform/**'
       - '.github/workflows/deploy-addons.yml'
       
-  # ===================================================================
-  # MODIFICATION 1: Ajout d'entrées pour le déclenchement manuel
-  # ===================================================================
   workflow_dispatch:
     inputs:
       action:
@@ -39,6 +26,7 @@ jobs:
   deploy:
     name: "Terraform Plan, Apply & Destroy for Add-ons"
     runs-on: ["self-hosted", "aws-private-runner"]
+    
     permissions:
       id-token: write
       contents: read
@@ -52,49 +40,45 @@ jobs:
     - name: Checkout source code
       uses: actions/checkout@v4
 
-
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: arn:aws:iam::228578233417:role/oicd
         aws-region: us-east-1
 
+    # ===================================================================
+    # --- CORRECTION APPLIQUÉE ICI ---
+    # ===================================================================
     - name: Configure Kubeconfig for EKS
       shell: bash 
       run: |
-        echo "Configuring access to EKS cluster..."
-        aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
+        echo "Configuring access to EKS cluster using OIDC role..."
+        # On force l'utilisation du rôle OIDC pour la configuration de kubectl.
+        # C'est la correction la plus importante pour résoudre l'erreur "Unauthorized".
+        aws eks update-kubeconfig \
+          --region us-east-1 \
+          --name tws-eks-cluster \
+          --role-arn arn:aws:iam::228578233417:role/oicd
         echo "Kubeconfig configured successfully!"
 
     - name: Terraform Init
       id: init
       run: terraform init
 
-    # ===================================================================
-    # MODIFICATION 2: Le plan de destruction est différent
-    # ===================================================================
     - name: Terraform Plan
       id: plan
-      # Le plan normal s'exécute pour les push et les apply manuels
       if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
       run: terraform plan -no-color -out=planfile
 
     - name: Terraform Plan (for Destroy)
       id: plan-destroy
-      # Un plan de destruction s'exécute si l'action est "destroy"
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
       run: terraform plan -destroy -no-color -out=destroyplan
 
-    # ===================================================================
-    # MODIFICATION 3: L'Apply est maintenant conditionné par l'input
-    # ===================================================================
     - name: Terraform Apply
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
       run: terraform apply -auto-approve -input=false planfile
 
-    # ===================================================================
-    # MODIFICATION 4: Ajout de l'étape de destruction sécurisée
-    # ===================================================================
     - name: Terraform Destroy (DANGEROUS)
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
       run: terraform destroy -auto-approve
