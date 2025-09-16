@@ -48,7 +48,6 @@ provider "helm" {
   kubernetes {
     config_path = "~/.kube/config"
   }
-  timeout_seconds = 900
 }
 
 provider "kubernetes" {
