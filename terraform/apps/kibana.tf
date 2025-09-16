@@ -15,7 +15,6 @@ module kibana {
     deploy        = 1
   }
   values = [file("${path.module}/helm-values/kibana.yaml")]
-  wait_for_completion = false
 
 
 }
