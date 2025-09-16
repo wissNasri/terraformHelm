@@ -14,6 +14,8 @@ module argocd {
     recreate_pods = false
     deploy        = 1
   }
+  timeout = 900 // 15 minutes
+
   values = [templatefile("${path.module}/helm-values/argocd-values.yaml", {
     serverReplicas = 1
   })]
