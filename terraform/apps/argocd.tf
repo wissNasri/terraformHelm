@@ -1,6 +1,10 @@
 module argocd {
   source  = "../modules/alb_controller"
 
+  wait_for_completion = true
+  atomic              = true
+  timeout             = 900
+
   namespace  = "argocd"
   repository =  "https://argoproj.github.io/argo-helm"
 
@@ -10,11 +14,9 @@ module argocd {
     version       = "8.1.3"
     chart         = "argo-cd"
     force_update  = true
-    wait          = false
     recreate_pods = false
     deploy        = 1
   }
-  timeout = 900 // 15 minutes
 
   values = [templatefile("${path.module}/helm-values/argocd-values.yaml", {
     serverReplicas = 1
