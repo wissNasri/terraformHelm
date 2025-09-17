@@ -18,7 +18,6 @@ module elasticsearch {
     recreate_pods = false
     deploy        = 1
   }
-  timeout             = 900
   values = [file("${path.module}/helm-values/elasticsearch.yaml")]
   depends_on = [kubernetes_storage_class_v1.ebs_sc]
 
