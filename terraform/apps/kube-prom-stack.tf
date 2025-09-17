@@ -18,7 +18,9 @@ module kube-prom-stack {
   timeout = 1200 // 20 minutes pour être sûr
 
   values = [file("${path.module}/helm-values/kube-prom-stack.yaml")]
-  depends_on = [module.alb_controller]
-
+  depends_on = [
+    module.alb_controller, 
+    module.ebs_csi_driver # <-- AJOUT
+  ]
 
 }
