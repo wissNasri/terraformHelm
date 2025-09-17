@@ -22,7 +22,7 @@ module kube-prom-stack {
   values = [file("${path.module}/helm-values/kube-prom-stack.yaml")]
   depends_on = [
     module.alb_controller,
-    kubernetes_storage_class_v1.ebs_sc
+    kubernetes_storage_class_v1.example
   ]
 
 }
