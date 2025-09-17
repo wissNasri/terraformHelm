@@ -19,7 +19,6 @@ module kube-prom-stack {
 
   values = [file("${path.module}/helm-values/kube-prom-stack.yaml")]
   depends_on = [module.alb_controller]
-  depends_on = [ module.ebs_csi_driver]           
 
 
 }
