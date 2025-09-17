@@ -1,6 +1,9 @@
 module filebeat {
   source  = "../modules/alb_controller"
 
+  wait_for_completion = true
+  timeout             = 600
+
   namespace  = "logging"
   repository =  "https://helm.elastic.co"
 
