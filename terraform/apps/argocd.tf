@@ -21,7 +21,6 @@ module argocd {
   })]
   depends_on = [
     module.alb_controller,
-    module.ebs_csi_driver # <-- AJOUTER CETTE LIGNE
   ]
 
 
