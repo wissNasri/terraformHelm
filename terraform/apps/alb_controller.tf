@@ -36,9 +36,9 @@ module "alb_controller" {
     wait          = false
     recreate_pods = false
     deploy        = 1
-    timeout       = 600 # Augmenter le timeout à 10 minutes pour laisser le temps aux pods de démarrer
 
   }
+  timeout       = 600 # Augmenter le timeout à 10 minutes pour laisser le temps aux pods de démarrer
 
   values = [templatefile("${path.module}/helm-values/alb_controller-1.13.3.yaml", {
     cluster_name  = var.eks_cluster_name
