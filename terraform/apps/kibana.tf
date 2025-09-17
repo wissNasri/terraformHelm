@@ -20,7 +20,7 @@ module kibana {
   values = [file("${path.module}/helm-values/kibana.yaml")]
   set = [
     {
-      name  = "disableHooks" # Le nom exact de la variable dans le values.yaml du chart Kibana
+      name  = "hooks.enabled"
       value = "true"
     }
   ]
