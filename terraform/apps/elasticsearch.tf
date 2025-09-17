@@ -9,11 +9,13 @@ module elasticsearch {
     description   = "elasticsearch"
     version       = "8.5.1"
     chart         = "elasticsearch"
+    force_update  = true
+    wait          = false
+    recreate_pods = false
     deploy        = 1
   }
   timeout             = 900
   values = [file("${path.module}/helm-values/elasticsearch.yaml")]
-  depends_on = [module.ebs_csi_driver]
 
 
 }
