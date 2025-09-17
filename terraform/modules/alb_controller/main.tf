@@ -15,21 +15,21 @@ resource "helm_release" "this" {
   force_update               = lookup(var.app, "force_update", false)
   description                = lookup(var.app, "description", null)
   
-  # --- CORRECTIONS ---
+  # --- CONTRÔLES DE DÉPLOIEMENT ROBUSTES ---
   wait                       = var.wait_for_completion
   timeout                    = var.timeout
-  # -------------------
+  atomic                     = var.atomic
+  cleanup_on_fail            = var.cleanup_on_fail
+  # -----------------------------------------
 
-  recreate_pods              = lookup(var.app, "recreate_pods", true)
+  recreate_pods              = lookup(var.app, "recreate_pods", false)
   max_history                = lookup(var.app, "max_history", 0)
-  lint                       = lookup(var.app, "lint", true)
-  cleanup_on_fail            = lookup(var.app, "cleanup_on_fail", false)
+  lint                       = lookup(var.app, "lint", false)
   create_namespace           = lookup(var.app, "create_namespace", true)
   disable_webhooks           = lookup(var.app, "disable_webhooks", false)
   verify                     = lookup(var.app, "verify", false)
   reuse_values               = lookup(var.app, "reuse_values", false)
   reset_values               = lookup(var.app, "reset_values", false)
-  atomic                     = lookup(var.app, "atomic", false)
   skip_crds                  = lookup(var.app, "skip_crds", false)
   render_subchart_notes      = lookup(var.app, "render_subchart_notes", true)
   disable_openapi_validation = lookup(var.app, "disable_openapi_validation", false)
