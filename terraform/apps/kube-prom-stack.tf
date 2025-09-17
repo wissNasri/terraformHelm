@@ -13,7 +13,6 @@ module kube-prom-stack {
     wait          = false
     recreate_pods = false
     deploy        = 1
-    timeout = 900
   }
   timeout = 1200 // 20 minutes pour être sûr
 
