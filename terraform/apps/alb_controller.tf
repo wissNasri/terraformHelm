@@ -26,6 +26,8 @@ module "alb_controller" {
 
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
+  wait_for_completion = true 
+
 
   app = {
     name          = "aws-load-balancer-controller"
@@ -35,6 +37,8 @@ module "alb_controller" {
     wait          = false
     recreate_pods = false
     deploy        = 1
+    timeout       = 600 # Augmenter le timeout à 10 minutes pour laisser le temps aux pods de démarrer
+
   }
 
   values = [templatefile("${path.module}/helm-values/alb_controller-1.13.3.yaml", {
