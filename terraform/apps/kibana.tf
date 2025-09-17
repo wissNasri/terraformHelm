@@ -18,11 +18,5 @@ module kibana {
     disable_hooks = true
   }
   values = [file("${path.module}/helm-values/kibana.yaml")]
-  set = [
-    {
-      name  = "hooks.enabled"
-      value = "true"
-    }
-  ]
   depends_on = [module.elasticsearch]
 }
