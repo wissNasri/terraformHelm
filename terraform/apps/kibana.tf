@@ -4,13 +4,15 @@ module kibana {
   namespace  = "logging"
   repository =  "https://helm.elastic.co"
 
+  wait_for_completion = true
+  timeout             = 600
+
   app = {
     name          = "kibana"
     description   = "kibana"
     version       = "8.5.1"
     chart         = "kibana"
     force_update  = true
-    wait          = false
     recreate_pods = false
     deploy        = 1
     disable_hooks = true
