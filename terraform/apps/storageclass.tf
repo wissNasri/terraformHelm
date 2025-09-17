@@ -14,7 +14,8 @@ resource "kubernetes_storage_class_v1" "example" {
   # Ne détruit cette StorageClass qu'après la destruction des modules qui l'utilisent.
   depends_on = [
     # Ajoutez ici tout autre module qui utilise la persistance, par exemple Prometheus.
-    module.kube-prom-stack,
-    module.argocd
+    module.ebs_csi_driver, # <-- AJOUT : Dépend du driver CSI
+    module.elasticsearch,
+    module.kube-prom-stack
   ]
 }
