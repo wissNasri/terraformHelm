@@ -17,7 +17,6 @@ module kibana {
     deploy        = 1
     disable_hooks = true
   }
-  timeout = 900
   values = [file("${path.module}/helm-values/kibana.yaml")]
   
   depends_on = [module.elasticsearch]
