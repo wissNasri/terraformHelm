@@ -10,12 +10,7 @@ resource "kubernetes_storage_class_v1" "example" {
   reclaim_policy      = "Delete"
   volume_binding_mode = "WaitForFirstConsumer"
 
-  # --- AJOUT : Dépendance explicite ---
-  # Ne détruit cette StorageClass qu'après la destruction des modules qui l'utilisent.
   depends_on = [
-    # Ajoutez ici tout autre module qui utilise la persistance, par exemple Prometheus.
-    module.ebs_csi_driver, # <-- AJOUT : Dépend du driver CSI
-    module.elasticsearch,
-    module.kube-prom-stack
+    module.ebs_csi_driver
   ]
 }
