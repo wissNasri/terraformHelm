@@ -18,7 +18,6 @@ module kube-prom-stack {
     recreate_pods = false
     deploy        = 1
   }
-  timeout = 1200 // 20 minutes pour être sûr
 
   values = [file("${path.module}/helm-values/kube-prom-stack.yaml")]
   depends_on = [
