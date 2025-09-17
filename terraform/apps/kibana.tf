@@ -18,6 +18,11 @@ module kibana {
     disable_hooks = true
   }
   values = [file("${path.module}/helm-values/kibana.yaml")]
-  
+  set = [
+    {
+      name  = "disableHooks" # Le nom exact de la variable dans le values.yaml du chart Kibana
+      value = "true"
+    }
+  ]
   depends_on = [module.elasticsearch]
 }
