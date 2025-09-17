@@ -22,7 +22,9 @@ module "iam_assumable_role_with_oidc_ebs" {
 
 module "ebs_csi_driver" {
   source = "../modules/alb_controller" # Idéalement, à renommer en "helm_app"
-
+  wait_for_completion = true
+  atomic              = true
+  timeout             = 600
   namespace  = "kube-system"
   repository = "https://kubernetes-sigs.github.io/aws-ebs-csi-driver"
 
@@ -32,7 +34,6 @@ module "ebs_csi_driver" {
     version       = "2.45.1" 
     chart         = "aws-ebs-csi-driver"
     force_update  = true
-    wait          = false
     recreate_pods = false
     deploy        = 1
   }
