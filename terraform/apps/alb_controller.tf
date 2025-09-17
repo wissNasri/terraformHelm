@@ -27,18 +27,19 @@ module "alb_controller" {
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
 
+  wait_for_completion = true
+  atomic              = true
+  timeout             = 600
 
   app = {
     name          = "aws-load-balancer-controller"
     chart         = "aws-load-balancer-controller"
-    version       = "1.13.3" # Version stable et recommandée
+    version       = "1.13.3" 
     force_update  = true
-    wait          = false
     recreate_pods = false
     deploy        = 1
 
   }
-  timeout       = 600 # Augmenter le timeout à 10 minutes pour laisser le temps aux pods de démarrer
 
   values = [templatefile("${path.module}/helm-values/alb_controller-1.13.3.yaml", {
     cluster_name  = var.eks_cluster_name
