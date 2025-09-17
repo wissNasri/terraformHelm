@@ -26,7 +26,6 @@ module "alb_controller" {
 
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
-  wait_for_completion = true 
 
 
   app = {
