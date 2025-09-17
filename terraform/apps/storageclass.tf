@@ -16,5 +16,6 @@ resource "kubernetes_storage_class_v1" "example" {
     module.elasticsearch,
     # Ajoutez ici tout autre module qui utilise la persistance, par exemple Prometheus.
     module.kube-prom-stack 
+    module.argocd
   ]
 }
