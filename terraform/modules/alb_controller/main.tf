@@ -28,7 +28,6 @@ resource "helm_release" "this" {
   create_namespace           = lookup(var.app, "create_namespace", true)
 
   disable_webhooks           = lookup(var.app, "disable_webhooks", false)
-  disable_hooks              = lookup(var.app, "disable_hooks", false)
 
   verify                     = lookup(var.app, "verify", false)
   reuse_values               = lookup(var.app, "reuse_values", false)
