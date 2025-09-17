@@ -19,7 +19,7 @@ on:
   # Se déclenche sur un push vers la branche main si les fichiers des add-ons changent
   push:
     branches:
-      - master
+      - main
     paths:
       - 'terraform/apps/**' # Cible le répertoire des add-ons
       - '.github/workflows/deploy-addons.yml'
