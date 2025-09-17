@@ -1,6 +1,11 @@
 module kube-prom-stack {
   source  = "../modules/alb_controller"
 
+  wait_for_completion = true
+  atomic              = true
+  cleanup_on_fail     = true
+  timeout             = 1200
+
   namespace  = "monitoring"
   repository =  "https://prometheus-community.github.io/helm-charts"
 
@@ -10,7 +15,6 @@ module kube-prom-stack {
     version       = "72.9.1"
     chart         = "kube-prometheus-stack"
     force_update  = true
-    wait          = false
     recreate_pods = false
     deploy        = 1
   }
@@ -18,8 +22,8 @@ module kube-prom-stack {
 
   values = [file("${path.module}/helm-values/kube-prom-stack.yaml")]
   depends_on = [
-    module.alb_controller, 
-    module.ebs_csi_driver # <-- AJOUT
+    module.alb_controller,
+    kubernetes_storage_class_v1.ebs_sc
   ]
 
 }
