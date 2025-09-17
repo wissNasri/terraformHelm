@@ -13,7 +13,7 @@ module elasticsearch {
   }
   timeout             = 900
   values = [file("${path.module}/helm-values/elasticsearch.yaml")]
-  depends_on = [module.ebs_csi_driver]
+  depends_on = [module.iam_assumable_role_with_oidc_ebs]
 
 
 }
