@@ -15,7 +15,6 @@ module elasticsearch {
     version       = "8.5.1"
     chart         = "elasticsearch"
     force_update  = true
-    wait          = false
     recreate_pods = false
     deploy        = 1
   }
