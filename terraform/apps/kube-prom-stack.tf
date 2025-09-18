@@ -24,7 +24,7 @@ module kube-prom-stack {
     module.alb_controller,
     kubernetes_storage_class_v1.example,
     module.iam_assumable_role_with_oidc_alb, # <-- CORRECTION FINALE
-    module.iam_assumable_role_with_oidc_ebs  # <-- CORRECTION FINALE
+    module.iam_assumable_role_with_oidc_ebs,  # <-- CORRECTION FINALE
     module.external_dns # <-- LIGNE AJOUTÉE
 
   ]
