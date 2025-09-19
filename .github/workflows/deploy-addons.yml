@@ -1,34 +1,23 @@
-# Nom du fichier : .github/workflows/deploy-addons.yml
-# DESCRIPTION : Pipeline pour déployer les add-ons Kubernetes (Helm charts)
-#               via Terraform.
-#
-# LOGIQUE CLÉ :
-# 1. EXÉCUTION : Ce workflow s'exécute sur le RUNNER AUTO-HÉBERGÉ (self-hosted)
-#    qui est une instance EC2 dans le même VPC que le cluster EKS.
-#
-
-# 2. AUTHENTIFICATION : L'authentification auprès d'AWS est gérée NATIVEMENT
-
-
-#    par le rôle IAM attaché à l'instance EC2. Il n'y a PAS BESOIN d'OIDC
-#    ni de clés d'accès (Access Keys).
-
-name: "APPS: Deploy or Destroy Kubernetes Add-ons"
+# ====================================================================================
+# WORKFLOW POUR LES APPLICATIONS ET ADD-ONS KUBERNETES
+# Gère le déploiement, la destruction et le nettoyage des ressources DANS le cluster.
+# ====================================================================================
+name: "APPS: Deploy, Destroy & Cleanup Kubernetes Apps/Add-ons"
 
 on:
-  # Se déclenche sur un push vers la branche main si les fichiers des add-ons changent
+  # Déclenchement sur push vers le répertoire des applications
   push:
     branches:
       - main
     paths:
-      - 'terraform/apps/**' # Cible le répertoire des add-ons
+      - 'terraform/apps/**'
       - '.github/workflows/deploy-addons.yml'
 
-  # Permet un déclenchement manuel depuis l'interface GitHub
+  # Déclenchement manuel pour les actions 'apply' ou 'destroy'
   workflow_dispatch:
     inputs:
       action:
-        description: 'Action à exécuter : "apply" pour déployer, "destroy" pour supprimer'
+        description: 'Action : "apply" pour déployer, "destroy" pour tout supprimer'
         required: true
         default: 'apply'
         type: choice
@@ -37,64 +26,85 @@ on:
           - destroy
 
 jobs:
-  deploy-addons:
-    name: "Terraform for Kubernetes Add-ons"
+  # ===================================================================
+  # JOB 1 : NETTOYAGE DES RESSOURCES DYNAMIQUES DE KUBERNETES
+  # Ce job s'exécute en premier, mais UNIQUEMENT pour l'action "destroy".
+  # Il supprime les Ingress, Services LoadBalancer et PVC créés par les applications.
+  # ===================================================================
+  cleanup-k8s-apps:
+    name: "1. Cleanup K8s App Resources (Ingress, LB-Services, PVCs)"
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
     
-    # Cible le runner auto-hébergé que vous avez provisionné
+    # S'exécute sur le runner qui a accès au cluster
     runs-on: ["self-hosted", "aws-private-runner"]
 
-    # La section "permissions" est inutile ici car nous n'utilisons pas OIDC.
-    # Le runner s'authentifie via son rôle IAM d'instance.
+    steps:
+      # Étape 1.1 : Se connecter au cluster EKS
+      - name: Configure Kubeconfig for EKS
+        run: |
+          echo "Configuring kubectl to connect to EKS cluster 'tws-eks-cluster'..."
+          aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
+          echo "Kubeconfig configured successfully."
 
+      # Étape 1.2 : Supprimer les ressources Kubernetes qui créent des dépendances AWS
+      - name: Delete AWS-dependent Kubernetes resources
+        run: |
+          echo "--- Deleting ALL Ingress resources to release Application Load Balancers ---"
+          kubectl delete ingress --all --all-namespaces --ignore-not-found=true
+          
+          echo "--- Deleting ALL Services of type LoadBalancer to release Network Load Balancers ---"
+          kubectl delete service --all --all-namespaces --field-selector=spec.type=LoadBalancer --ignore-not-found=true
+          
+          echo "--- Deleting ALL PersistentVolumeClaims to release EBS Volumes ---"
+          kubectl delete pvc --all --all-namespaces --ignore-not-found=true
+          
+          echo "Kubernetes resource deletion initiated. Waiting 3 minutes for AWS controllers to de-provision resources..."
+          sleep 180
+          echo "Wait time complete. Proceeding to destroy Helm charts."
+
+  # ===================================================================
+  # JOB 2 : DÉPLOIEMENT OU DESTRUCTION DES ADD-ONS (HELM CHARTS)
+  # Ce job gère les charts Helm (ArgoCD, Prometheus, etc.) via Terraform.
+  # ===================================================================
+  manage-addons-via-terraform:
+    name: "2. Terraform for Kubernetes Add-ons"
+    
+    # Dépend du job de nettoyage (uniquement en cas de 'destroy')
+    needs: cleanup-k8s-apps
+    
+    # Condition : S'exécute toujours, sauf si c'est un 'destroy' et que le nettoyage a échoué.
+    if: always() && (github.event.inputs.action != 'destroy' || needs.cleanup-k8s-apps.result == 'success')
+    
+    runs-on: ["self-hosted", "aws-private-runner"]
+    
     defaults:
       run:
         shell: bash
-        # Le répertoire de travail pour toutes les commandes de cette pipeline
         working-directory: ./terraform/apps
 
     steps:
-      # Étape 1 : Récupérer le code du dépôt
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # Étape 2 : Configurer l'accès à Kubernetes
-      # La CLI AWS va automatiquement utiliser le rôle IAM de l'instance EC2.
-      # EKS autorisera la connexion car ce rôle IAM est listé dans les "access_entries" du cluster.
       - name: Configure Kubeconfig for EKS
         run: |
-          echo "Configuring kubectl to connect to EKS cluster..."
-          aws eks update-kubeconfig \
-            --region us-east-1 \
-            --name tws-eks-cluster
-          echo "Kubeconfig configured successfully!"
-          
-          echo "--- Verifying cluster access ---"
+          aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
+          echo "--- Verifying cluster access before Terraform ---"
           kubectl get nodes -o wide
           echo "--------------------------------"
 
-      # Étape 3 : Initialiser Terraform
-      # Le provider AWS de Terraform va aussi détecter et utiliser le rôle IAM de l'instance.
-      # Les providers Helm et Kubernetes utiliseront le fichier ~/.kube/config généré à l'étape précédente.
       - name: Terraform Init
-        id: init
         run: terraform init
 
-      # Étape 4 : Générer un plan Terraform
-      # Cette étape s'exécute pour les push et les apply manuels.
       - name: Terraform Plan
-        id: plan
         run: terraform plan -no-color -out=planfile
 
-      # Étape 5 : Appliquer les changements (uniquement sur déclenchement manuel)
-      # Installe ou met à jour les charts Helm sur le cluster.
-      - name: Terraform Apply
+      - name: Terraform Apply (Deploy Add-ons)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
         run: terraform apply -auto-approve -input=false planfile
 
-      # Étape 6 : Détruire les ressources (uniquement sur déclenchement manuel)
-      # Supprime les charts Helm du cluster.
-      - name: Terraform Destroy (DANGEROUS)
+      - name: Terraform Destroy (Remove Add-ons)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
         run: |
-          echo "WARNING: Preparing to destroy all add-ons managed by Terraform."
+          echo "WARNING: Destroying all Helm-managed add-ons..."
           terraform destroy -auto-approve
