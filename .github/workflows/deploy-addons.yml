@@ -45,9 +45,7 @@ jobs:
           echo "--- Deleting 'quiz' namespace to remove all its resources (Ingress, etc.)... ---"
           kubectl delete namespace quiz --ignore-not-found=true
           
-          echo "IMPORTANT: Waiting 3 minutes for AWS to delete dependent resources (Load Balancers)..."
-          sleep 180
-          echo "Wait complete."
+
 
       # --- ÉTAPE 3 : LOGIQUE TERRAFORM (pour apply et destroy) ---
       - name: Terraform Init
