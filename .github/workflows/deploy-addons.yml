@@ -1,15 +1,34 @@
-# ====================================================================================
-# WORKFLOW SIMPLIFIÉ POUR LES APPLICATIONS ET ADD-ONS KUBERNETES
-# Un seul job qui gère le déploiement ou la destruction complète.
-# ====================================================================================
-name: "APPS: Deploy or Destroy Kubernetes Apps & Add-ons"
+# Nom du fichier : .github/workflows/deploy-addons.yml
+# DESCRIPTION : Pipeline pour déployer les add-ons Kubernetes (Helm charts)
+#               via Terraform.
+#
+# LOGIQUE CLÉ :
+# 1. EXÉCUTION : Ce workflow s'exécute sur le RUNNER AUTO-HÉBERGÉ (self-hosted)
+#    qui est une instance EC2 dans le même VPC que le cluster EKS.
+#
+
+# 2. AUTHENTIFICATION : L'authentification auprès d'AWS est gérée NATIVEMENT
+
+
+#    par le rôle IAM attaché à l'instance EC2. Il n'y a PAS BESOIN d'OIDC
+#    ni de clés d'accès (Access Keys).
+
+name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
-  # Déclenchement manuel pour les actions 'apply' ou 'destroy'
+  # Se déclenche sur un push vers la branche main si les fichiers des add-ons changent
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/apps/**' # Cible le répertoire des add-ons
+      - '.github/workflows/deploy-addons.yml'
+
+  # Permet un déclenchement manuel depuis l'interface GitHub
   workflow_dispatch:
     inputs:
       action:
-        description: 'Action : "apply" pour déployer, "destroy" pour tout supprimer'
+        description: 'Action à exécuter : "apply" pour déployer, "destroy" pour supprimer'
         required: true
         default: 'apply'
         type: choice
@@ -18,52 +37,64 @@ on:
           - destroy
 
 jobs:
-  # ===================================================================
-  # JOB UNIQUE : Gère tout le cycle de vie des add-ons
-  # ===================================================================
-  manage-kubernetes-resources:
-    name: "Deploy or Destroy Kubernetes Resources"
+  deploy-addons:
+    name: "Terraform for Kubernetes Add-ons"
     
-    # S'exécute sur votre runner qui a accès à tout
+    # Cible le runner auto-hébergé que vous avez provisionné
     runs-on: ["self-hosted", "aws-private-runner"]
-    
+
+    # La section "permissions" est inutile ici car nous n'utilisons pas OIDC.
+    # Le runner s'authentifie via son rôle IAM d'instance.
+
+    defaults:
+      run:
+        shell: bash
+        # Le répertoire de travail pour toutes les commandes de cette pipeline
+        working-directory: ./terraform/apps
+
     steps:
-      # --- ÉTAPE 1 : PRÉPARATION COMMUNE ---
+      # Étape 1 : Récupérer le code du dépôt
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      # Étape 2 : Configurer l'accès à Kubernetes
+      # La CLI AWS va automatiquement utiliser le rôle IAM de l'instance EC2.
+      # EKS autorisera la connexion car ce rôle IAM est listé dans les "access_entries" du cluster.
       - name: Configure Kubeconfig for EKS
         run: |
-          echo "Configuring kubectl to connect to EKS cluster 'tws-eks-cluster'..."
-          aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
-          echo "Kubeconfig configured."
-
-      # --- ÉTAPE 2 : LOGIQUE DE DESTRUCTION (s'exécute seulement si action=destroy) ---
-      - name: "Cleanup: Delete 'quiz' namespace and wait"
-        if: github.event.inputs.action == 'destroy'
-        run: |
-          echo "--- Deleting 'quiz' namespace to remove all its resources (Ingress, etc.)... ---"
-          kubectl delete namespace quiz --ignore-not-found=true
+          echo "Configuring kubectl to connect to EKS cluster..."
+          aws eks update-kubeconfig \
+            --region us-east-1 \
+            --name tws-eks-cluster
+          echo "Kubeconfig configured successfully!"
           
+          echo "--- Verifying cluster access ---"
+          kubectl get nodes -o wide
+          echo "--------------------------------"
 
-
-      # --- ÉTAPE 3 : LOGIQUE TERRAFORM (pour apply et destroy) ---
+      # Étape 3 : Initialiser Terraform
+      # Le provider AWS de Terraform va aussi détecter et utiliser le rôle IAM de l'instance.
+      # Les providers Helm et Kubernetes utiliseront le fichier ~/.kube/config généré à l'étape précédente.
       - name: Terraform Init
-        working-directory: ./terraform/apps
+        id: init
         run: terraform init
 
+      # Étape 4 : Générer un plan Terraform
+      # Cette étape s'exécute pour les push et les apply manuels.
       - name: Terraform Plan
-        working-directory: ./terraform/apps
+        id: plan
         run: terraform plan -no-color -out=planfile
 
-      - name: Terraform Apply (Deploy Add-ons)
-        if: github.event.inputs.action == 'apply'
-        working-directory: ./terraform/apps
+      # Étape 5 : Appliquer les changements (uniquement sur déclenchement manuel)
+      # Installe ou met à jour les charts Helm sur le cluster.
+      - name: Terraform Apply
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
         run: terraform apply -auto-approve -input=false planfile
 
-      - name: Terraform Destroy (Remove Add-ons)
-        if: github.event.inputs.action == 'destroy'
-        working-directory: ./terraform/apps
+      # Étape 6 : Détruire les ressources (uniquement sur déclenchement manuel)
+      # Supprime les charts Helm du cluster.
+      - name: Terraform Destroy (DANGEROUS)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
         run: |
-          echo "WARNING: Destroying all Helm-managed add-ons (ArgoCD, Prometheus, etc.)..."
+          echo "WARNING: Preparing to destroy all add-ons managed by Terraform."
           terraform destroy -auto-approve
