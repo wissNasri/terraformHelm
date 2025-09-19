@@ -1,10 +1,19 @@
 # ====================================================================================
-# WORKFLOW POUR LES APPLICATIONS ET ADD-ONS KUBERNETES (Version Améliorée)
-# Gère le cycle de vie complet, en ciblant spécifiquement les namespaces applicatifs.
+# WORKFLOW FINAL POUR LES APPLICATIONS ET ADD-ONS KUBERNETES
+# Gère le déploiement, la destruction et le nettoyage des ressources DANS le cluster.
 # ====================================================================================
 name: "APPS: Deploy, Destroy & Cleanup Kubernetes Apps/Add-ons"
 
 on:
+  # Déclenchement sur push vers le répertoire des applications
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/apps/**'
+      - '.github/workflows/deploy-addons.yml'
+
+  # Déclenchement manuel pour les actions 'apply' ou 'destroy'
   workflow_dispatch:
     inputs:
       action:
@@ -20,12 +29,13 @@ jobs:
   # ===================================================================
   # JOB 1 : NETTOYAGE CIBLÉ DES APPLICATIONS KUBERNETES
   # S'exécute en premier, mais UNIQUEMENT pour l'action "destroy".
-  # Supprime les namespaces des applications pour nettoyer toutes leurs ressources.
+  # Supprime le namespace 'quiz' pour nettoyer toutes ses ressources (Ingress, Services, PVCs).
   # ===================================================================
   cleanup-app-namespaces:
-    name: "1. Cleanup App Namespaces (quiz, etc.)"
+    name: "1. Cleanup App Namespaces (quiz)"
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
     
+    # S'exécute sur le runner qui a déjà accès au cluster et aux outils AWS/kubectl
     runs-on: ["self-hosted", "aws-private-runner"]
 
     steps:
@@ -36,28 +46,28 @@ jobs:
           aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
           echo "Kubeconfig configured successfully."
 
-      # Étape 1.2 : Supprimer les namespaces applicatifs
-      - name: Delete application namespaces to remove all their resources
+      # Étape 1.2 : Supprimer le namespace de l'application pour tout nettoyer
+      - name: Delete 'quiz' namespace to remove all its resources
         run: |
           echo "--- Deleting 'quiz' namespace to clean up all its resources (Ingress, Services, PVCs)... ---"
           kubectl delete namespace quiz --ignore-not-found=true
           
-          # Ajoutez ici d'autres namespaces si vous en avez
-          # echo "--- Deleting 'other-app' namespace... ---"
-          # kubectl delete namespace other-app --ignore-not-found=true
-          
           echo "Namespace deletion initiated. This is an asynchronous process."
-          echo "Waiting 3 minutes for Kubernetes and AWS controllers to de-provision all resources (Load Balancers, EBS...)"
+          echo "Waiting 3 minutes for Kubernetes and AWS controllers to de-provision all dependent resources (Load Balancers, EBS volumes)..."
           sleep 180
           echo "Wait time complete. Proceeding to destroy Helm charts."
 
   # ===================================================================
   # JOB 2 : DÉPLOIEMENT OU DESTRUCTION DES ADD-ONS (HELM CHARTS)
-  # Ce job reste identique.
+  # Gère les charts Helm (ArgoCD, Prometheus, etc.) via Terraform.
   # ===================================================================
   manage-addons-via-terraform:
     name: "2. Terraform for Kubernetes Add-ons"
+    
+    # Dépend du job de nettoyage (uniquement en cas de 'destroy')
     needs: cleanup-app-namespaces
+    
+    # Condition : S'exécute toujours, sauf si c'est un 'destroy' et que le nettoyage a échoué.
     if: always() && (github.event.inputs.action != 'destroy' || needs.cleanup-app-namespaces.result == 'success')
     
     runs-on: ["self-hosted", "aws-private-runner"]
@@ -72,7 +82,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure Kubeconfig for EKS
-        run: aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
+        run: |
+          aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
+          echo "--- Verifying cluster access before Terraform ---"
+          kubectl get nodes -o wide
+          echo "--------------------------------"
 
       - name: Terraform Init
         run: terraform init
@@ -86,4 +100,6 @@ jobs:
 
       - name: Terraform Destroy (Remove Add-ons)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
-        run: terraform destroy -auto-approve
+        run: |
+          echo "WARNING: Destroying all Helm-managed add-ons (ArgoCD, Prometheus, etc.)..."
+          terraform destroy -auto-approve
