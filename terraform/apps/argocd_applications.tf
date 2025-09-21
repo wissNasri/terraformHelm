@@ -12,6 +12,7 @@ resource "kubernetes_manifest" "argocd_app_production" {
       "namespace" = "argocd" # Déployé dans le namespace d'ArgoCD
       "finalizers" = [
         "resources-finalizer.argocd.argoproj.io"
+
       ]
     }
     "spec" = {
