@@ -62,6 +62,8 @@ jobs:
 
           echo "1. Suppression du namespace 'quiz' pour supprimer l'Ingress..."
           kubectl delete namespace quiz --ignore-not-found=true
+          kubectl delete namespace quiz-staging --ignore-not-found=true
+
 
           echo "2. ATTENTE DE 3 MINUTES pour la suppression de l'ALB par AWS..."
           sleep 60
