@@ -64,7 +64,7 @@ jobs:
           kubectl delete namespace quiz --ignore-not-found=true
 
           echo "2. ATTENTE DE 3 MINUTES pour la suppression de l'ALB par AWS..."
-          sleep 180
+          sleep 60
 
           echo "####################################################################"
           echo "### FIN DU NETTOYAGE. DÉMARRAGE DE LA DESTRUCTION DES ADD-ONS. ###"
