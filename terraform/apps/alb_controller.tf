@@ -55,11 +55,3 @@ module "alb_controller" {
     }
   ]
 }
-resource "time_sleep" "wait_for_alb_controller" {
-  # Cette ressource dépend de la fin de l'installation du chart Helm
-  depends_on = [module.alb_controller]
-
-  # On attend 60 secondes. C'est une solution simple mais efficace pour laisser
-  # le temps aux pods de démarrer et de devenir "Ready".
-  create_duration = "60s"
-}
