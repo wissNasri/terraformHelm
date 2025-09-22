@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-applications-manager
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    # Pointeur vers le dépôt où se trouvent les définitions de vos applications
+    repoURL: 'https://github.com/wissNasri/app.git'
+    targetRevision: main
+    # Pointeur vers le dossier créé à l'étape 1
+    path: applications
+  destination:
+    server: 'https://kubernetes.default.svc'
+    # Cette application "mère" déploie ses enfants (les autres Applications ) dans le namespace 'argocd'
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
