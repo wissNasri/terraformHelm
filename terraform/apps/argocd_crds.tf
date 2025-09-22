@@ -1,10 +1,9 @@
 # terraform/apps/argocd_crds.tf
-# DESCRIPTION: Installe les Custom Resource Definitions (CRDs) requises par Argo CD.
-#              Cette version utilise yamlsplit pour gérer plusieurs documents YAML.
+# DESCRIPTION: Installe les CRDs requises par Argo CD via des ressources distinctes.
+#              Cette approche est la plus compatible et la plus lisible.
 
-locals {
-  # Contient les 3 CRDs principales sous forme d'une seule chaîne de caractères.
-  argocd_crd_manifests = <<-EOT
+resource "kubernetes_manifest" "crd_applications" {
+  manifest = yamldecode(<<-EOT
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -29,7 +28,12 @@ spec:
     storage: true
     subresources:
       status: {}
----
+EOT
+)
+}
+
+resource "kubernetes_manifest" "crd_applicationsets" {
+  manifest = yamldecode(<<-EOT
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -54,7 +58,12 @@ spec:
     storage: true
     subresources:
       status: {}
----
+EOT
+)
+}
+
+resource "kubernetes_manifest" "crd_appprojects" {
+  manifest = yamldecode(<<-EOT
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -77,11 +86,5 @@ spec:
     served: true
     storage: true
 EOT
-}
-
-# La ressource kubernetes_manifest va maintenant itérer sur chaque document
-# séparé par yamlsplit et créer une ressource pour chacun.
-resource "kubernetes_manifest" "argocd_crds" {
-  for_each = { for k, v in yamlsplit(local.argocd_crd_manifests) : k => v if length(v) > 0 }
-  manifest = each.value
+)
 }
