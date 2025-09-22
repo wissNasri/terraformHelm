@@ -20,7 +20,7 @@ resource "aws_iam_policy" "external_dns_policy" {
 # 3. Création du rôle IAM pour le Service Account (IRSA).
 module "iam_assumable_role_with_oidc_external_dns" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
-  version = "~> 5.0"
+  version = "~> 2.0"
 
   create_role = true
   role_name   = "AmazonEKSExternalDNSRole"
