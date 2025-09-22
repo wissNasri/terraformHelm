@@ -83,6 +83,8 @@ jobs:
 
       - name: Terraform Plan
         id: plan
+        env:
+          TF_LOG: DEBUG
         # On ne génère un plan que pour 'apply', pas pour 'destroy'
         if: github.event.inputs.action == 'apply'
         run: terraform plan -no-color -out=planfile
