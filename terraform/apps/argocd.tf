@@ -18,7 +18,7 @@ module "argocd" {
     force_update  = true
     recreate_pods = false
     deploy        = 1
-    skip_crds     = true # MODIFICATION : Indique à Helm de ne pas gérer les CRDs.
+    skip_crds     = true # Ajout important : dit à Helm de ne pas toucher aux CRDs
   }
 
   values = [templatefile("${path.module}/helm-values/argocd-values.yaml", {
@@ -28,8 +28,9 @@ module "argocd" {
   depends_on = [
     module.alb_controller,
     module.iam_assumable_role_with_oidc_alb,
+    # Ajout important : dépendance explicite sur les CRDs
     kubernetes_manifest.crd_applications,
     kubernetes_manifest.crd_applicationsets,
     kubernetes_manifest.crd_appprojects
-]
+  ]
 }
