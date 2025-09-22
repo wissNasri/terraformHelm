@@ -4070,3 +4070,26 @@ commitServer:
   # -- Priority class for the commit server pods
   # @default -- `""` (defaults to global.priorityClassName)
   priorityClassName: ""
+
+
+extraObjects:
+  - apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      name: app-of-apps-root
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: 'https://github.com/wissNasri/app.git'
+        targetRevision: main
+        path: applications # Argo CD va lire les fichiers dans ce dossier
+      destination:
+        server: 'https://kubernetes.default.svc'
+        namespace: argocd
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
