@@ -1,4 +1,4 @@
-# Fichier : terraform/apps/external_dns.tf
+# Fichier : terraform/apps/external_dns.tf (Version Finale Corrigée)
 # DESCRIPTION : Gère le déploiement de l'add-on ExternalDNS, y compris
 #               la création du rôle IAM (IRSA) et le déploiement du chart Helm.
 
@@ -20,13 +20,14 @@ resource "aws_iam_policy" "external_dns_policy" {
 # 3. Création du rôle IAM pour le Service Account (IRSA).
 module "iam_assumable_role_with_oidc_external_dns" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  # CORRECTION 1 : Utilisation d'une version compatible du module IAM.
   version = "~> 2.0"
 
   create_role = true
   role_name   = "AmazonEKSExternalDNSRole"
 
   # Référence au fournisseur OIDC du cluster EKS.
-  provider_url = replace(data.aws_iam_openid_connect_provider.oidc_provider.url, "https://", "" )
+  provider_url = replace(data.aws_iam_openid_connect_provider.oidc_provider.url, "https://", ""  )
 
   # Attachement de la politique IAM créée ci-dessus.
   role_policy_arns = [
@@ -45,7 +46,7 @@ module "external_dns" {
   app = {
     name          = "external-dns"
     chart         = "external-dns"
-    version       = "1.19.0" # Version alignée sur la documentation fournie.
+    version       = "1.19.0"
     deploy        = 1
   }
 
@@ -53,17 +54,14 @@ module "external_dns" {
   values = [templatefile("${path.module}/helm-values/external-dns-values.yaml", {
     AWS_REGION     = var.aws_region
     HOSTED_ZONE_ID = data.aws_route53_zone.iovision_site.zone_id
-  } )]
+  }  )]
 
   # Injection de l'annotation du rôle IAM sur le compte de service.
   set = [
     {
       name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-      # ====================================================================
-      # CORRECTION DÉFINITIVE APPLIQUÉE ICI
-      # Le nom correct de l'output du module est "iam_role_arn".
-      # ====================================================================
-      value = module.iam_assumable_role_with_oidc_external_dns.iam_role_arn
+      # CORRECTION 2 : Utilisation du nom de sortie correct ("this_iam_role_arn").
+      value = module.iam_assumable_role_with_oidc_external_dns.this_iam_role_arn
     }
   ]
 
