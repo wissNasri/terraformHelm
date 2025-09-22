@@ -1,6 +1,5 @@
 # terraform/apps/argocd_crds.tf
 # DESCRIPTION: Installe les CRDs requises par Argo CD via des ressources distinctes.
-#              Cette approche est la plus compatible et la plus lisible.
 
 resource "kubernetes_manifest" "crd_applications" {
   manifest = yamldecode(<<-EOT
@@ -14,9 +13,7 @@ spec:
     kind: Application
     listKind: ApplicationList
     plural: applications
-    shortNames:
-    - app
-    - apps
+    shortNames: ["app", "apps"]
   scope: Namespaced
   versions:
   - name: v1alpha1
@@ -44,9 +41,7 @@ spec:
     kind: ApplicationSet
     listKind: ApplicationSetList
     plural: applicationsets
-    shortNames:
-    - appset
-    - appsets
+    shortNames: ["appset", "appsets"]
   scope: Namespaced
   versions:
   - name: v1alpha1
@@ -74,8 +69,7 @@ spec:
     kind: AppProject
     listKind: AppProjectList
     plural: appprojects
-    shortNames:
-    - proj
+    shortNames: ["proj"]
   scope: Namespaced
   versions:
   - name: v1alpha1
