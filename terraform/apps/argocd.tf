@@ -1,7 +1,4 @@
-# ===================================================================
-# PARTIE 1 : INSTALLATION D'ARGO CD (VOTRE CODE EXISTANT)
-# Ce bloc utilise votre module Helm pour installer le chart Argo CD.
-# ===================================================================
+
 module "argocd" {
   source = "../modules/alb_controller" # Note: Pensez à renommer ce module en "helm_app" pour plus de clarté future
 
@@ -34,23 +31,3 @@ module "argocd" {
   ]
 }
 
-# ===================================================================
-# PARTIE 2 : DÉPLOIEMENT DE L'APPLICATION "MÈRE" (BLOC À AJOUTER)
-# Ce bloc s'exécute juste après l'installation d'Argo CD.
-# Il crée l'application qui gérera toutes les autres.
-# ===================================================================
-resource "kubernetes_manifest" "app_of_apps_manager" {
-  
-  # On dit à Terraform d'appliquer le manifeste que vous avez créé.
-  # La fonction file() lit le contenu du fichier YAML.
-  # La fonction yamldecode() le transforme en une structure que Terraform comprend.
-  manifest = yamldecode(file("${path.module}/app-of-apps.yaml"))
-
-  # DÉPENDANCE CRUCIALE :
-  # Terraform attendra que le module "argocd" (Partie 1)
-  # soit complètement terminé avant d'essayer de créer cette ressource.
-  # Cela garantit qu'Argo CD est prêt à recevoir sa première application.
-  depends_on = [
-    module.argocd
-  ]
-}
