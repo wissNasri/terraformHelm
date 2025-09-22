@@ -23,5 +23,7 @@ module elasticsearch {
     kubernetes_storage_class_v1.example,
     module.alb_controller,
     module.iam_assumable_role_with_oidc_ebs # <-- CORRECTION FINALE
+    module.ebs_csi_driver // Ajout crucial
+
   ]
 }
