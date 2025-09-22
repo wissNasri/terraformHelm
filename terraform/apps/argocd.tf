@@ -1,4 +1,6 @@
-module argocd {
+# terraform/apps/argocd.tf
+
+module "argocd" {
   source  = "../modules/alb_controller"
 
   wait_for_completion = true
@@ -6,7 +8,7 @@ module argocd {
   timeout             = 900
 
   namespace  = "argocd"
-  repository =  "https://argoproj.github.io/argo-helm"
+  repository = "https://argoproj.github.io/argo-helm"
 
   app = {
     name          = "my-argo-cd"
@@ -16,15 +18,16 @@ module argocd {
     force_update  = true
     recreate_pods = false
     deploy        = 1
+    skip_crds     = true # MODIFICATION : Indique à Helm de ne pas gérer les CRDs.
   }
 
   values = [templatefile("${path.module}/helm-values/argocd-values.yaml", {
     serverReplicas = 1
-  })]
+  } )]
+
   depends_on = [
     module.alb_controller,
-    module.iam_assumable_role_with_oidc_alb 
+    module.iam_assumable_role_with_oidc_alb,
+    kubernetes_manifest.argocd_crds # MODIFICATION : Dépend explicitement de la création des CRDs.
   ]
-
-
 }
