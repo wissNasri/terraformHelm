@@ -1,4 +1,5 @@
 # terraform/apps/app-of-apps.tf
+# DESCRIPTION: Déploie l'application racine "app-of-apps" une fois qu'Argo CD et ses CRDs sont prêts.
 
 resource "kubernetes_manifest" "app_of_apps_root" {
   manifest = {
@@ -6,7 +7,7 @@ resource "kubernetes_manifest" "app_of_apps_root" {
     "kind"       = "Application"
     "metadata" = {
       "name"      = "app-of-apps-root"
-      "namespace" = "argocd" # Assurez-vous que c'est le bon namespace
+      "namespace" = "argocd"
       "finalizers" = [
         "resources-finalizer.argocd.argoproj.io"
       ]
@@ -31,7 +32,6 @@ resource "kubernetes_manifest" "app_of_apps_root" {
     }
   }
 
-  # Dépendance explicite pour s'assurer que le chart Argo CD est installé
-  # et que ses CRDs sont prêtes avant de tenter de créer cet objet.
+  # Dépendance explicite pour s'assurer que le chart Argo CD est bien installé.
   depends_on = [module.argocd]
 }
