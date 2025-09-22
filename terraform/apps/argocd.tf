@@ -49,6 +49,8 @@ resource "helm_release" "argocd_crds" {
   # ===================================================================
 depends_on = [
   kubernetes_namespace.argocd,
+  module.alb_controller,
+
 ]
   # Contrôles de déploiement
   wait              = true
