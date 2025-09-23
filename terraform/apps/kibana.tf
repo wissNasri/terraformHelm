@@ -18,7 +18,6 @@ module kibana {
     disable_hooks = true
   }
   values = [file("${path.module}/helm-values/kibana.yaml")]
-  depends_on = [module.elasticsearch,
-                module.external_dns]
+  depends_on = [module.elasticsearch]
 
 }
