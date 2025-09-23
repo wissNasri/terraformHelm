@@ -1,4 +1,4 @@
-# Fichier : terraform/apps/terraform.tf (Version Finale Corrigée)
+# Fichier : terraform/apps/terraform.tf
 
 terraform {
   backend "s3" {
@@ -33,12 +33,10 @@ provider "helm" {
   }
 }
 
-# MODIFICATION APPLIQUÉE ICI
+# MODIFICATION IMPORTANTE
 provider "kubernetes" {
   config_path = "~/.kube/config"
 
-  # Cette ligne demande au provider de ne pas valider les types de ressources
-  # (comme "Application") pendant la phase de plan, ce qui résout l'erreur.
-  # La validation se fera au moment de l'apply, lorsque les CRDs existeront.
+  # Empêche Terraform de valider les CRDs pendant le 'plan'
   validate_resources_on_plan = false
 }
