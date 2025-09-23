@@ -18,7 +18,7 @@ module "argocd" {
     force_update  = true
     recreate_pods = false
     deploy        = 1
-    # La ligne 'skip_crds' est supprimée
+    skip_crds     = true # Ajoutez cette ligne
   }
 
   values = [templatefile("${path.module}/helm-values/argocd-values.yaml", {
