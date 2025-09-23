@@ -26,6 +26,8 @@ module kube-prom-stack {
     module.iam_assumable_role_with_oidc_alb, # <-- CORRECTION FINALE
     module.iam_assumable_role_with_oidc_ebs,  # <-- CORRECTION FINALE
     module.external_dns # <-- LIGNE AJOUTÉE
+    null_resource.wait_for_argo_crds # Ajout de la dépendance
+
 
   ]
 
