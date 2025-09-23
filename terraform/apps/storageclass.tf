@@ -11,7 +11,7 @@ resource "kubernetes_storage_class_v1" "example" {
   volume_binding_mode = "WaitForFirstConsumer"
 
   depends_on = [
-    module.ebs_csi_driver
+    module.ebs_csi_driver,
     module.iam_assumable_role_with_oidc_ebs  # <-- CORRECTION FINALE
 
   ]
