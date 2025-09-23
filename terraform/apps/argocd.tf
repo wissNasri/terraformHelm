@@ -18,7 +18,6 @@ module "argocd" {
     force_update  = true
     recreate_pods = false
     deploy        = 1
-    skip_crds     = false 
 
   }
 
