@@ -82,9 +82,7 @@ jobs:
         run: terraform init -upgrade
 
 
-        # On ne génère un plan que pour 'apply', pas pour 'destroy'
-        if: github.event.inputs.action == 'apply'
-        run: terraform plan -no-color -out=planfile
+
 
       - name: Terraform Apply
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
