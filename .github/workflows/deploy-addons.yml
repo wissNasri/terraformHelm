@@ -1,130 +1,106 @@
 # Nom du fichier : .github/workflows/deploy-addons.yml
-# DESCRIPTION : Pipeline pour déployer et détruire les add-ons Kubernetes.
-#               La destruction inclut une attente pour le nettoyage des volumes persistants.
+# DESCRIPTION : Pipeline de destruction avec nettoyage FORCÉ et CIBLÉ (LA BONNE APPROCHE POUR VOTRE PROJET)
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
+  # ... (inchangé)
   push:
-    branches: 
-      - main 
-    paths: 
-      - 'terraform/apps/**'
-      - '.github/workflows/deploy-addons.yml'
+    branches: [main]
+    paths: ['terraform/apps/**', '.github/workflows/deploy-addons.yml']
   pull_request:
-    branches: 
-      - main 
-    paths: 
-      - 'terraform/apps/**'
-      - '.github/workflows/deploy-addons.yml'
-      
+    branches: [main]
+    paths: ['terraform/apps/**', '.github/workflows/deploy-addons.yml']
   workflow_dispatch:
     inputs:
       action:
-        description: 'Action à exécuter : "apply" pour déployer, "destroy" pour supprimer'
+        description: 'Action: "apply" or "destroy"'
         required: true
         default: 'apply'
         type: choice
-        options:
-        - apply
-        - destroy
+        options: [apply, destroy]
       confirm_destroy:
-        description: 'Si action=destroy, tapez "destroy-all-addons" pour confirmer.'
+        description: 'If action=destroy, type "destroy-all-addons" to confirm.'
         required: false
 
 jobs:
   deploy-addons:
     name: "Terraform for Kubernetes Add-ons"
-    
     runs-on: ["self-hosted", "aws-private-runner"]
-
     defaults:
       run:
         shell: bash
         working-directory: ./terraform/apps
 
     steps:
-    # ===================================================================
-    # ÉTAPES DE CONFIGURATION INITIALE (INCHANGÉES)
-    # ===================================================================
+    # ... (étapes de configuration et de déploiement inchangées) ...
     - name: Checkout source code 
       uses: actions/checkout@v4
-
     - name: Configure Kubeconfig for EKS
       run: |
-        echo "Configuring kubectl to connect to EKS cluster..."
         aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
-        echo "Kubeconfig configured successfully!"
-        echo "--- Verifying cluster access ---"
         kubectl get nodes -o wide
-        echo "--------------------------------"
     - name: Terraform Init
-      id: init
       run: terraform init
-
-    # ===================================================================
-    # LOGIQUE DE DÉPLOIEMENT (APPLY) (INCHANGÉE)
-    # ===================================================================
-    - name: Plan and Apply Core Add-ons
+    - name: Apply logic...
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
       run: |
-        echo "--- Planning core add-ons ---"
         terraform plan -no-color -out=plan-step1
-        echo "--- Applying core add-ons ---"
         terraform apply -auto-approve -input=false plan-step1
-
-    - name: Plan and Apply App-of-Apps
-      if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
-      run: |
-        echo "--- Waiting 30 seconds for CRDs to be fully recognized ---"
         sleep 30
-        echo "--- Planning App-of-Apps resource ---"
         terraform plan -no-color -out=plan-step2 -var="deploy_app_of_apps=true"
-        echo "--- Applying App-of-Apps resource ---"
         terraform apply -auto-approve -input=false plan-step2
-
-    # ===================================================================
-    # VALIDATION SUR PUSH (INCHANGÉE)
-    # ===================================================================
-    - name: Validate Terraform Plan (on push)
+    - name: Validate Plan on push
       if: github.event_name == 'push'
-      run: |
-        echo "Validating base plan (without App-of-Apps)..."
-        terraform plan -no-color
+      run: terraform plan -no-color
 
     # ===================================================================
-    # ÉTAPE 1 DE LA DESTRUCTION : TERRAFORM DESTROY
-    # On lance d'abord la destruction des applications.
+    # ÉTAPE DE NETTOYAGE FORCÉ (AVANT TERRAFORM DESTROY)
     # ===================================================================
-    - name: Terraform Destroy (DANGEROUS)
-      id: terraform_destroy
+    - name: Force-Clean Targeted Stateful Resources (if destroying)
       if: |
         github.event_name == 'workflow_dispatch' &&
         github.event.inputs.action == 'destroy' &&
         github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
-        echo "WARNING: Destroying all Helm releases managed by Terraform."
-        echo "This will delete Deployments, StatefulSets, and PersistentVolumeClaims..."
-        terraform destroy -auto-approve -var="deploy_app_of_apps=true"
+        echo "--- [START] Aggressive Pre-Destroy Cleanup ---"
+        
+        # On cible les namespaces contenant les PVCs à supprimer
+        NAMESPACES_TO_CLEAN="logging quiz quiz-staging"
+        
+        echo "--- Step 1: Force-cleaning PersistentVolumeClaims to release EBS volumes ---"
+        for ns in $NAMESPACES_TO_CLEAN; do
+          if kubectl get ns $ns > /dev/null 2>&1; then
+            echo "--- Cleaning PVCs in namespace: $ns ---"
+            
+            # On supprime les PVCs sans attendre
+            kubectl delete pvc --all -n $ns --wait=false
+            sleep 10 # Pause pour que le statut passe à "Terminating"
+            
+            # On force la suppression des PVCs bloqués
+            PVCS=$(kubectl get pvc -n $ns -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
+            if [ -n "$PVCS" ]; then
+              for pvc in $PVCS; do
+                echo "Patching PVC '$pvc' in '$ns' to remove finalizers..."
+                kubectl patch pvc $pvc -n $ns -p '{"metadata":{"finalizers":null}}' --type=merge
+              done
+            fi
+          fi
+        done
+
+        echo "--- PVC cleanup initiated. Waiting 30 seconds for CSI driver to act... ---"
+        sleep 30 # Délai CRUCIAL
+        
+        echo "--- [END] Pre-destroy cleanup finished. ---"
 
     # ===================================================================
-    # ÉTAPE 2 DE LA DESTRUCTION : ATTENTE DU NETTOYAGE DES VOLUMES
-    # C'est le nouveau bloc qui remplace votre ancienne étape de nettoyage.
+    # ÉTAPE FINALE : TERRAFORM DESTROY
     # ===================================================================
-    - name: Wait for Persistent Volume Cleanup
-      if: steps.terraform_destroy.conclusion == 'success' # Ne s'exécute que si le destroy a réussi
+    - name: Terraform Destroy (DANGEROUS)
+      if: |
+        github.event_name == 'workflow_dispatch' &&
+        github.event.inputs.action == 'destroy' &&
+        github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
-        echo "--- [START] Waiting for Persistent Volumes (PVs) to be released by AWS ---"
-        echo "Terraform has deleted the PVCs. Now we wait for the CSI driver to delete the underlying EBS volumes."
-        
-        # On attend jusqu'à 5 minutes (300 secondes) que la liste des PVs soit vide.
-        # La commande vérifie toutes les 15 secondes.
-        timeout 300s bash -c ' \
-          while [ $(kubectl get pv --no-headers 2>/dev/null | wc -l) -gt 0 ]; do \
-            echo "Waiting for PersistentVolumes to be deleted... ($(kubectl get pv --no-headers | wc -l) remaining)"; \
-            kubectl get pv; \
-            sleep 15; \
-          done' || echo "::warning::Timeout reached. Some PVs may not have been deleted. Check the AWS console for orphaned EBS volumes."
-        
-        echo "--- [END] All PersistentVolumes have been deleted or timeout was reached. ---"
-        echo "The cluster is now ready for infrastructure destruction."
+        echo "WARNING: Proceeding with 'terraform destroy' after cleanup."
+        terraform destroy -auto-approve -var="deploy_app_of_apps=true"
