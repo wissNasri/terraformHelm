@@ -1,6 +1,6 @@
 # Nom du fichier : .github/workflows/deploy-addons.yml
-# DESCRIPTION : Pipeline pour déployer les add-ons Kubernetes (Helm charts)
-#               via Terraform, en gérant les dépendances de CRD.
+# DESCRIPTION : Pipeline pour déployer et détruire les add-ons Kubernetes,
+#               avec un nettoyage explicite des namespaces applicatifs.
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
@@ -32,13 +32,11 @@ jobs:
   deploy-addons:
     name: "Terraform for Kubernetes Add-ons"
     
-    # Cible le runner auto-hébergé qui a accès au cluster
     runs-on: ["self-hosted", "aws-private-runner"]
 
     defaults:
       run:
         shell: bash
-        # Le répertoire de travail pour toutes les commandes Terraform
         working-directory: ./terraform/apps
 
     steps:
@@ -46,7 +44,7 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # Étape 2 : Configurer l'accès à Kubernetes via le rôle IAM de l'instance
+      # Étape 2 : Configurer l'accès à Kubernetes
       - name: Configure Kubeconfig for EKS
         run: |
           echo "Configuring kubectl to connect to EKS cluster..."
@@ -63,40 +61,31 @@ jobs:
         run: terraform init
 
       # ===================================================================
-      # LOGIQUE DE DÉPLOIEMENT EN DEUX TEMPS (POUR APPLY MANUEL)
+      # LOGIQUE DE DÉPLOIEMENT (APPLY MANUEL)
       # ===================================================================
 
-      # Étape 4.1 : Plan et Apply des Add-ons principaux (SANS l'App of Apps)
-      # Cela installe ArgoCD et ses CRD en premier.
       - name: Plan and Apply Core Add-ons
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
         run: |
-          echo "--- Planning core add-ons (App of Apps disabled by default) ---"
+          echo "--- Planning core add-ons ---"
           terraform plan -no-color -out=plan-step1
-          
           echo "--- Applying core add-ons ---"
           terraform apply -auto-approve -input=false plan-step1
 
-      # Étape 4.2 : Plan et Apply de l'App of Apps (SEULEMENT)
-      # Cette étape s'exécute après la première, garantissant que les CRD existent.
       - name: Plan and Apply App-of-Apps
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
         run: |
-          echo "--- Waiting 30 seconds for CRDs to be fully recognized by the API server ---"
+          echo "--- Waiting 30 seconds for CRDs to be fully recognized ---"
           sleep 30
-
-          echo "--- Planning App-of-Apps resource (by enabling it with a variable) ---"
-          # On exécute un second plan en activant la variable "deploy_app_of_apps"
+          echo "--- Planning App-of-Apps resource ---"
           terraform plan -no-color -out=plan-step2 -var="deploy_app_of_apps=true"
-
           echo "--- Applying App-of-Apps resource ---"
           terraform apply -auto-approve -input=false plan-step2
 
       # ===================================================================
-      # LOGIQUE DE VALIDATION (POUR PUSH)
+      # LOGIQUE DE VALIDATION (PUSH)
       # ===================================================================
 
-      # Étape 5 : Valide uniquement le plan de base lors d'un push
       - name: Validate Terraform Plan (on push)
         if: github.event_name == 'push'
         run: |
@@ -104,10 +93,28 @@ jobs:
           terraform plan -no-color
 
       # ===================================================================
-      # LOGIQUE DE DESTRUCTION (POUR DESTROY MANUEL)
+      # LOGIQUE DE DESTRUCTION (DESTROY MANUEL)
       # ===================================================================
 
-      # Étape 6 : Détruit toutes les ressources, y compris l'App of Apps
+      # --- NOUVELLE ÉTAPE 6 : Nettoyage des namespaces applicatifs ---
+      # S'exécute AVANT la destruction des add-ons pour garantir un nettoyage propre.
+      - name: Clean Application Namespaces (if destroying)
+        if: |
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.action == 'destroy' &&
+          github.event.inputs.confirm_destroy == 'destroy-all-addons'
+        run: |
+          echo "--- Deleting 'quiz' and 'quiz-staging' namespaces ---"
+          # La commande "delete" attendra que toutes les ressources soient supprimées.
+          # L'option "|| true" empêche le workflow d'échouer si un namespace n'existe pas.
+          kubectl delete namespace quiz --ignore-not-found=true || true
+          kubectl delete namespace quiz-staging --ignore-not-found=true || true
+          
+          echo "--- Waiting for namespaces to be fully terminated ---"
+          # On attend un peu pour laisser le temps aux finalizers de faire leur travail.
+          sleep 60
+
+      # Étape 7 : Détruit toutes les ressources Terraform
       - name: Terraform Destroy (DANGEROUS)
         if: |
           github.event_name == 'workflow_dispatch' &&
@@ -115,6 +122,4 @@ jobs:
           github.event.inputs.confirm_destroy == 'destroy-all-addons'
         run: |
           echo "WARNING: Preparing to destroy all add-ons managed by Terraform."
-          # Pour la destruction, on doit activer la variable pour que Terraform "voie"
-          # la ressource app-of-apps et puisse la détruire.
           terraform destroy -auto-approve -var="deploy_app_of_apps=true"
