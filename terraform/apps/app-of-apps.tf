@@ -31,6 +31,6 @@ resource "kubernetes_manifest" "app_of_apps_root" {
     }
   }
 
-  # Cette ligne garantit que l'on attend la fin de l'installation d'Argo CD
+  # Cette dépendance garantit que l'on attend la fin de l'installation d'Argo CD
   depends_on = [module.argocd]
 }
