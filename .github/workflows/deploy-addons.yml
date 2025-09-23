@@ -1,30 +1,19 @@
 # Nom du fichier : .github/workflows/deploy-addons.yml
 # DESCRIPTION : Pipeline pour déployer les add-ons Kubernetes (Helm charts)
-#               via Terraform.
-#
-# LOGIQUE CLÉ :
-# 1. EXÉCUTION : Ce workflow s'exécute sur le RUNNER AUTO-HÉBERGÉ (self-hosted)
-#    qui est une instance EC2 dans le même VPC que le cluster EKS.
-#
-
-# 2. AUTHENTIFICATION : L'authentification auprès d'AWS est gérée NATIVEMENT
-
-
-#    par le rôle IAM attaché à l'instance EC2. Il n'y a PAS BESOIN d'OIDC
-#    ni de clés d'accès (Access Keys).
+#               via Terraform, en gérant les dépendances de CRD.
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
-  # Se déclenche sur un push vers la branche main si les fichiers des add-ons changent
+  # Se déclenche sur un push pour valider la configuration
   push:
     branches:
       - main
     paths:
-      - 'terraform/apps/**' # Cible le répertoire des add-ons
+      - 'terraform/apps/**'
       - '.github/workflows/deploy-addons.yml'
 
-  # Permet un déclenchement manuel depuis l'interface GitHub
+  # Permet un déclenchement manuel pour les actions de déploiement ou de destruction
   workflow_dispatch:
     inputs:
       action:
@@ -35,21 +24,21 @@ on:
         options:
           - apply
           - destroy
+      confirm_destroy:
+        description: 'Si action=destroy, tapez "destroy-all-addons" pour confirmer.'
+        required: false
 
 jobs:
   deploy-addons:
     name: "Terraform for Kubernetes Add-ons"
     
-    # Cible le runner auto-hébergé que vous avez provisionné
+    # Cible le runner auto-hébergé qui a accès au cluster
     runs-on: ["self-hosted", "aws-private-runner"]
-
-    # La section "permissions" est inutile ici car nous n'utilisons pas OIDC.
-    # Le runner s'authentifie via son rôle IAM d'instance.
 
     defaults:
       run:
         shell: bash
-        # Le répertoire de travail pour toutes les commandes de cette pipeline
+        # Le répertoire de travail pour toutes les commandes Terraform
         working-directory: ./terraform/apps
 
     steps:
@@ -57,15 +46,11 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # Étape 2 : Configurer l'accès à Kubernetes
-      # La CLI AWS va automatiquement utiliser le rôle IAM de l'instance EC2.
-      # EKS autorisera la connexion car ce rôle IAM est listé dans les "access_entries" du cluster.
+      # Étape 2 : Configurer l'accès à Kubernetes via le rôle IAM de l'instance
       - name: Configure Kubeconfig for EKS
         run: |
           echo "Configuring kubectl to connect to EKS cluster..."
-          aws eks update-kubeconfig \
-            --region us-east-1 \
-            --name tws-eks-cluster
+          aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
           echo "Kubeconfig configured successfully!"
           
           echo "--- Verifying cluster access ---"
@@ -73,28 +58,63 @@ jobs:
           echo "--------------------------------"
 
       # Étape 3 : Initialiser Terraform
-      # Le provider AWS de Terraform va aussi détecter et utiliser le rôle IAM de l'instance.
-      # Les providers Helm et Kubernetes utiliseront le fichier ~/.kube/config généré à l'étape précédente.
       - name: Terraform Init
         id: init
         run: terraform init
 
-      # Étape 4 : Générer un plan Terraform
-      # Cette étape s'exécute pour les push et les apply manuels.
-      - name: Terraform Plan
-        id: plan
-        run: terraform plan -no-color -out=planfile
+      # ===================================================================
+      # LOGIQUE DE DÉPLOIEMENT EN DEUX TEMPS (POUR APPLY MANUEL)
+      # ===================================================================
 
-      # Étape 5 : Appliquer les changements (uniquement sur déclenchement manuel)
-      # Installe ou met à jour les charts Helm sur le cluster.
-      - name: Terraform Apply
+      # Étape 4.1 : Plan et Apply des Add-ons principaux (SANS l'App of Apps)
+      # Cela installe ArgoCD et ses CRD en premier.
+      - name: Plan and Apply Core Add-ons
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
-        run: terraform apply -auto-approve -input=false planfile
+        run: |
+          echo "--- Planning core add-ons (App of Apps disabled by default) ---"
+          terraform plan -no-color -out=plan-step1
+          
+          echo "--- Applying core add-ons ---"
+          terraform apply -auto-approve -input=false plan-step1
 
-      # Étape 6 : Détruire les ressources (uniquement sur déclenchement manuel)
-      # Supprime les charts Helm du cluster.
+      # Étape 4.2 : Plan et Apply de l'App of Apps (SEULEMENT)
+      # Cette étape s'exécute après la première, garantissant que les CRD existent.
+      - name: Plan and Apply App-of-Apps
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+        run: |
+          echo "--- Waiting 30 seconds for CRDs to be fully recognized by the API server ---"
+          sleep 30
+
+          echo "--- Planning App-of-Apps resource (by enabling it with a variable) ---"
+          # On exécute un second plan en activant la variable "deploy_app_of_apps"
+          terraform plan -no-color -out=plan-step2 -var="deploy_app_of_apps=true"
+
+          echo "--- Applying App-of-Apps resource ---"
+          terraform apply -auto-approve -input=false plan-step2
+
+      # ===================================================================
+      # LOGIQUE DE VALIDATION (POUR PUSH)
+      # ===================================================================
+
+      # Étape 5 : Valide uniquement le plan de base lors d'un push
+      - name: Validate Terraform Plan (on push)
+        if: github.event_name == 'push'
+        run: |
+          echo "Validating base plan (without App-of-Apps)..."
+          terraform plan -no-color
+
+      # ===================================================================
+      # LOGIQUE DE DESTRUCTION (POUR DESTROY MANUEL)
+      # ===================================================================
+
+      # Étape 6 : Détruit toutes les ressources, y compris l'App of Apps
       - name: Terraform Destroy (DANGEROUS)
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+        if: |
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.action == 'destroy' &&
+          github.event.inputs.confirm_destroy == 'destroy-all-addons'
         run: |
           echo "WARNING: Preparing to destroy all add-ons managed by Terraform."
-          terraform destroy -auto-approve
+          # Pour la destruction, on doit activer la variable pour que Terraform "voie"
+          # la ressource app-of-apps et puisse la détruire.
+          terraform destroy -auto-approve -var="deploy_app_of_apps=true"
