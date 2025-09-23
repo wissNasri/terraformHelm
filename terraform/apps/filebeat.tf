@@ -18,5 +18,5 @@ module filebeat {
   }
   values = [file("${path.module}/helm-values/filebeat.yaml")]
 
-  depends_on = [module.elasticsearch]
+  depends_on = [module.elasticsearch,null_resource.wait_for_argo_crds]
 }
