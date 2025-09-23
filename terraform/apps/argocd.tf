@@ -18,7 +18,8 @@ module "argocd" {
     force_update  = true
     recreate_pods = false
     deploy        = 1
-    skip_crds     = true # <-- MODIFICATION IMPORTANTE
+    skip_crds     = false 
+
   }
 
   values = [templatefile("${path.module}/helm-values/argocd-values.yaml", {
