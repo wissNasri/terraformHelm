@@ -38,5 +38,4 @@ provider "kubernetes" {
   config_path = "~/.kube/config"
 
   # Empêche Terraform de valider les CRDs pendant le 'plan'
-  validate_resources_on_plan = false
 }
