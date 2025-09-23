@@ -5,7 +5,6 @@
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
-  # Se déclenche sur un push pour valider la configuration
   push:
     branches:
       - main
@@ -13,7 +12,6 @@ on:
       - 'terraform/apps/**'
       - '.github/workflows/deploy-addons.yml'
 
-  # Permet un déclenchement manuel pour les actions de déploiement ou de destruction
   workflow_dispatch:
     inputs:
       action:
@@ -31,7 +29,6 @@ on:
 jobs:
   deploy-addons:
     name: "Terraform for Kubernetes Add-ons"
-    
     runs-on: ["self-hosted", "aws-private-runner"]
 
     defaults:
@@ -40,22 +37,21 @@ jobs:
         working-directory: ./terraform/apps
 
     steps:
-      # Étape 1 : Récupérer le code du dépôt
+      # Étape 1 : Checkout du code
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # Étape 2 : Configurer l'accès à Kubernetes
+      # Étape 2 : Configurer l'accès Kubernetes
       - name: Configure Kubeconfig for EKS
         run: |
           echo "Configuring kubectl to connect to EKS cluster..."
           aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
           echo "Kubeconfig configured successfully!"
-          
           echo "--- Verifying cluster access ---"
           kubectl get nodes -o wide
           echo "--------------------------------"
 
-      # Étape 3 : Initialiser Terraform
+      # Étape 3 : Terraform Init
       - name: Terraform Init
         id: init
         run: terraform init
@@ -63,7 +59,6 @@ jobs:
       # ===================================================================
       # LOGIQUE DE DÉPLOIEMENT (APPLY MANUEL)
       # ===================================================================
-
       - name: Plan and Apply Core Add-ons
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
         run: |
@@ -85,7 +80,6 @@ jobs:
       # ===================================================================
       # LOGIQUE DE VALIDATION (PUSH)
       # ===================================================================
-
       - name: Validate Terraform Plan (on push)
         if: github.event_name == 'push'
         run: |
@@ -95,32 +89,29 @@ jobs:
       # ===================================================================
       # LOGIQUE DE DESTRUCTION (DESTROY MANUEL)
       # ===================================================================
-
-      # --- NOUVELLE ÉTAPE 6 : Nettoyage des namespaces applicatifs ---
-      # S'exécute AVANT la destruction des add-ons pour garantir un nettoyage propre.
       - name: Clean Application Namespaces (if destroying)
         if: |
           github.event_name == 'workflow_dispatch' &&
           github.event.inputs.action == 'destroy' &&
           github.event.inputs.confirm_destroy == 'destroy-all-addons'
         run: |
-          echo "--- Deleting 'quiz' and 'quiz-staging' namespaces ---"
-          # La commande "delete" attendra que toutes les ressources soient supprimées.
-          # L'option "|| true" empêche le workflow d'échouer si un namespace n'existe pas.
-          kubectl get namespace quiz-staging -o json \
-              | jq '.spec.finalizers = []' \
-              | kubectl replace --raw "/api/v1/namespaces/quiz/finalize" -f -
+          echo "--- Cleaning application namespaces ---"
+          for ns in quiz quiz-staging; do
+            if kubectl get ns $ns > /dev/null 2>&1; then
+              echo "Namespace $ns exists, forcing deletion of finalizers..."
+              kubectl get namespace $ns -o json \
+                | jq '.spec.finalizers = []' \
+                | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f - || true
+            else
+              echo "Namespace $ns does not exist, skipping."
+            fi
+          done
+          echo "--- Waiting for namespaces to terminate ---"
+          sleep 60
+          echo "--- Current namespaces ---"
+          kubectl get ns
 
-          kubectl get namespace quiz -o json \
-            | jq '.spec.finalizers = []' \
-            | kubectl replace --raw "/api/v1/namespaces/quiz/finalize" -f -
-
-          
-          echo "--- Waiting for namespaces to be fully terminated ---"
-          # On attend un peu pour laisser le temps aux finalizers de faire leur travail.
-          sleep 90
-
-      # Étape 7 : Détruit toutes les ressources Terraform
+      # Étape 7 : Terraform Destroy
       - name: Terraform Destroy (DANGEROUS)
         if: |
           github.event_name == 'workflow_dispatch' &&
