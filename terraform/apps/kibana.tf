@@ -18,6 +18,9 @@ module kibana {
     disable_hooks = true
   }
   values = [file("${path.module}/helm-values/kibana.yaml")]
-  depends_on = [module.elasticsearch,module.external_dns,null_resource.wait_for_argo_crds]
+  depends_on = [module.elasticsearch,
+                module.external_dns,
+                null_resource.wait_for_argo_crds
+]
 
 }
