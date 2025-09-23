@@ -27,6 +27,7 @@ module "argocd" {
 
   depends_on = [
     module.alb_controller,
+    module.iam_assumable_role_with_oidc_alb,
     module.external_dns
 
   ]
