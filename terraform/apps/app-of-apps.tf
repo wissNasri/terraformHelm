@@ -1,5 +1,4 @@
 # Fichier : terraform/apps/app-of-apps.tf
-
 resource "kubernetes_manifest" "app_of_apps_root" {
   manifest = {
     "apiVersion" = "argoproj.io/v1alpha1"
@@ -7,9 +6,7 @@ resource "kubernetes_manifest" "app_of_apps_root" {
     "metadata" = {
       "name"      = "app-of-apps-root"
       "namespace" = "argocd"
-      "finalizers" = [
-        "resources-finalizer.argocd.argoproj.io"
-      ]
+      "finalizers" = ["resources-finalizer.argocd.argoproj.io"]
     }
     "spec" = {
       "project" = "default"
@@ -22,15 +19,8 @@ resource "kubernetes_manifest" "app_of_apps_root" {
         "server"    = "https://kubernetes.default.svc"
         "namespace" = "argocd"
       }
-      "syncPolicy" = {
-        "automated" = {
-          "prune"    = true
-          "selfHeal" = true
-        }
-      }
+      "syncPolicy" = { "automated" = { "prune" = true, "selfHeal" = true } }
     }
   }
-
-  # Cette dépendance garantit que l'on attend la fin de l'installation d'Argo CD
   depends_on = [module.argocd]
 }
