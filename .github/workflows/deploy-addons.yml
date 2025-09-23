@@ -1,17 +1,17 @@
 # Nom du fichier : .github/workflows/deploy-addons.yml
 # DESCRIPTION : Pipeline pour déployer et détruire les add-ons Kubernetes,
-#               avec un nettoyage explicite des namespaces applicatifs.
+#               avec un nettoyage FORCÉ et efficace des namespaces applicatifs.
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
+  # ... (le reste de la section 'on' est inchangé)
   push:
     branches:
       - main
     paths:
       - 'terraform/apps/**'
       - '.github/workflows/deploy-addons.yml'
-
   workflow_dispatch:
     inputs:
       action:
@@ -29,19 +29,16 @@ on:
 jobs:
   deploy-addons:
     name: "Terraform for Kubernetes Add-ons"
+    
+    # ... (le reste de la section 'jobs' est inchangé jusqu'à l'étape de nettoyage)
     runs-on: ["self-hosted", "aws-private-runner"]
-
     defaults:
       run:
         shell: bash
         working-directory: ./terraform/apps
-
     steps:
-      # Étape 1 : Checkout du code
       - name: Checkout source code
         uses: actions/checkout@v4
-
-      # Étape 2 : Configurer l'accès Kubernetes
       - name: Configure Kubeconfig for EKS
         run: |
           echo "Configuring kubectl to connect to EKS cluster..."
@@ -50,15 +47,9 @@ jobs:
           echo "--- Verifying cluster access ---"
           kubectl get nodes -o wide
           echo "--------------------------------"
-
-      # Étape 3 : Terraform Init
       - name: Terraform Init
         id: init
         run: terraform init
-
-      # ===================================================================
-      # LOGIQUE DE DÉPLOIEMENT (APPLY MANUEL)
-      # ===================================================================
       - name: Plan and Apply Core Add-ons
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
         run: |
@@ -66,7 +57,6 @@ jobs:
           terraform plan -no-color -out=plan-step1
           echo "--- Applying core add-ons ---"
           terraform apply -auto-approve -input=false plan-step1
-
       - name: Plan and Apply App-of-Apps
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
         run: |
@@ -76,10 +66,6 @@ jobs:
           terraform plan -no-color -out=plan-step2 -var="deploy_app_of_apps=true"
           echo "--- Applying App-of-Apps resource ---"
           terraform apply -auto-approve -input=false plan-step2
-
-      # ===================================================================
-      # LOGIQUE DE VALIDATION (PUSH)
-      # ===================================================================
       - name: Validate Terraform Plan (on push)
         if: github.event_name == 'push'
         run: |
@@ -87,31 +73,52 @@ jobs:
           terraform plan -no-color
 
       # ===================================================================
-      # LOGIQUE DE DESTRUCTION (DESTROY MANUEL)
+      # ÉTAPE DE NETTOYAGE ROBUSTE
       # ===================================================================
-      - name: Clean Application Namespaces (if destroying)
+      - name: Force-Clean Application Namespaces (if destroying)
         if: |
           github.event_name == 'workflow_dispatch' &&
           github.event.inputs.action == 'destroy' &&
           github.event.inputs.confirm_destroy == 'destroy-all-addons'
         run: |
-          echo "--- Cleaning application namespaces ---"
+          echo "--- Forcefully cleaning application namespaces ---"
+          
+          # Boucle sur chaque namespace à supprimer
           for ns in quiz quiz-staging; do
+            # Vérifie si le namespace existe
             if kubectl get ns $ns > /dev/null 2>&1; then
-              echo "Namespace $ns exists, forcing deletion of finalizers..."
-              kubectl get namespace $ns -o json \
-                | jq '.spec.finalizers = []' \
-                | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f - || true
+              echo "Namespace '$ns' exists. Initiating deletion..."
+              
+              # Étape 1 : Lancer la suppression en arrière-plan.
+              # La commande est lancée avec '&' pour ne pas bloquer le script.
+              kubectl delete ns $ns &
+              
+              # Étape 2 : Attendre un peu pour que le statut passe à "Terminating".
+              sleep 10
+              
+              # Étape 3 : Vérifier si le namespace est toujours bloqué.
+              if kubectl get ns $ns > /dev/null 2>&1; then
+                echo "Namespace '$ns' is stuck in Terminating state. Forcing finalizer removal..."
+                
+                # Récupère le manifeste, enlève les finalizers avec 'jq', et pousse le résultat
+                # via 'kubectl replace --raw'. C'est la procédure de forçage.
+                kubectl get namespace $ns -o json \
+                  | jq '.spec.finalizers = []' \
+                  | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
+              else
+                echo "Namespace '$ns' deleted successfully without force."
+              fi
             else
-              echo "Namespace $ns does not exist, skipping."
+              echo "Namespace '$ns' does not exist, skipping."
             fi
           done
-          echo "--- Waiting for namespaces to terminate ---"
-          sleep 60
-          echo "--- Current namespaces ---"
+          
+          echo "--- Waiting for final termination ---"
+          sleep 15 # Petite pause pour que l'API server traite les finalisations
+          echo "--- Namespaces after cleanup ---"
           kubectl get ns
 
-      # Étape 7 : Terraform Destroy
+      # Étape finale : Terraform Destroy
       - name: Terraform Destroy (DANGEROUS)
         if: |
           github.event_name == 'workflow_dispatch' &&
