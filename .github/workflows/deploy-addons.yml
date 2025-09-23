@@ -107,12 +107,18 @@ jobs:
           echo "--- Deleting 'quiz' and 'quiz-staging' namespaces ---"
           # La commande "delete" attendra que toutes les ressources soient supprimées.
           # L'option "|| true" empêche le workflow d'échouer si un namespace n'existe pas.
-          kubectl delete namespace quiz --ignore-not-found=true || true
-          kubectl delete namespace quiz-staging --ignore-not-found=true || true
+          kubectl get namespace quiz-staging -o json \
+              | jq '.spec.finalizers = []' \
+              | kubectl replace --raw "/api/v1/namespaces/quiz/finalize" -f -
+
+          kubectl get namespace quiz -o json \
+            | jq '.spec.finalizers = []' \
+            | kubectl replace --raw "/api/v1/namespaces/quiz/finalize" -f -
+
           
           echo "--- Waiting for namespaces to be fully terminated ---"
           # On attend un peu pour laisser le temps aux finalizers de faire leur travail.
-          sleep 60
+          sleep 90
 
       # Étape 7 : Détruit toutes les ressources Terraform
       - name: Terraform Destroy (DANGEROUS)
