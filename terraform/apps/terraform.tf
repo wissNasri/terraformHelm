@@ -1,4 +1,4 @@
-# Fichier : terraform/apps/terraform.tf
+# Fichier : terraform/apps/terraform.tf (Version Finale Corrigée)
 
 terraform {
   backend "s3" {
@@ -20,11 +20,6 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = "~> 2.37.1"
     }
-    # AJOUT NÉCESSAIRE pour la ressource de pause
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.2"
-    }
   }
 }
 
@@ -38,6 +33,12 @@ provider "helm" {
   }
 }
 
+# MODIFICATION APPLIQUÉE ICI
 provider "kubernetes" {
   config_path = "~/.kube/config"
+
+  # Cette ligne demande au provider de ne pas valider les types de ressources
+  # (comme "Application") pendant la phase de plan, ce qui résout l'erreur.
+  # La validation se fera au moment de l'apply, lorsque les CRDs existeront.
+  validate_resources_on_plan = false
 }
