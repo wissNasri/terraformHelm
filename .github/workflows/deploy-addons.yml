@@ -81,8 +81,6 @@ jobs:
         id: init
         run: terraform init -upgrade
 
-      - name: Terraform Plan
-        id: plan
 
         # On ne génère un plan que pour 'apply', pas pour 'destroy'
         if: github.event.inputs.action == 'apply'
