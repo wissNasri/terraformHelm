@@ -1,5 +1,6 @@
 # Fichier : terraform/apps/ebs_csi_driver.tf
 # DESCRIPTION : Déploie le driver AWS EBS CSI et son rôle IAM associé.
+# VERSION FINALE : Inclut les permissions RBAC pour la suppression des PVs.
 
 module "iam_assumable_role_with_oidc_ebs" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
@@ -47,8 +48,36 @@ module "ebs_csi_driver" {
     {
       name  = "controller.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
       value = module.iam_assumable_role_with_oidc_ebs.this_iam_role_arn
+    },
+    # ===================================================================
+    # AJOUT CRUCIAL : Permission de modifier les finalizers des PVs
+    # ===================================================================
+    # Cette règle est souvent manquante et empêche le nettoyage complet.
+    # Nous donnons au contrôleur (via le sidecar csi-provisioner) la permission
+    # de "patcher" les PVs pour retirer le finalizer de protection.
+    {
+      name  = "sidecars.provisioner.additionalClusterRoleRules[0].apiGroups[0]"
+      value = "" # Le groupe d'API core est une chaîne vide
+    },
+    {
+      name  = "sidecars.provisioner.additionalClusterRoleRules[0].resources[0]"
+      value = "persistentvolumes"
+    },
+    {
+      name  = "sidecars.provisioner.additionalClusterRoleRules[0].verbs[0]"
+      value = "get"
+    },
+    {
+      name  = "sidecars.provisioner.additionalClusterRoleRules[0].verbs[1]"
+      value = "list"
+    },
+    {
+      name  = "sidecars.provisioner.additionalClusterRoleRules[0].verbs[2]"
+      value = "watch"
+    },
+    {
+      name  = "sidecars.provisioner.additionalClusterRoleRules[0].verbs[3]"
+      value = "patch" # La permission clé !
     }
   ]
 }
-
-
