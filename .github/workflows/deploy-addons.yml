@@ -1,5 +1,5 @@
 # Nom du fichier : .github/workflows/deploy-addons.yml
-# VERSION FINALE AMÉLIORÉE : Idempotente et logique de destruction optimisée.
+# VERSION FINALE ROBUSTE : Gère les finalizers et l'ordre de destruction.
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
@@ -59,7 +59,7 @@ jobs:
         run: terraform plan -no-color
 
   # ===================================================================
-  # JOB 2 : DESTRUCTION ORCHESTRÉE (LOGIQUE RECTIFIÉE)
+  # JOB 2 : DESTRUCTION ORCHESTRÉE (LOGIQUE FINALE)
   # ===================================================================
   destroy-addons:
     name: "Orchestrated Destroy for Add-ons"
@@ -82,21 +82,35 @@ jobs:
           aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
           kubectl get nodes
 
-      # --- ÉTAPE 1 : DESTRUCTION DE L'INFRASTRUCTURE TERRAFORM ---
-      - name: "Execute Terraform Destroy (to trigger pod termination)"
+      # --- ÉTAPE 1 : NETTOYAGE CHIRURGICAL DES APPLICATIONS ARGO CD ---
+      - name: "Pre-Destroy: Clean Argo CD Applications and Finalizers"
         run: |
-          echo "--- [START] Running terraform destroy to delete Helm releases and other resources ---"
-          terraform init
-          # Cette commande va supprimer les helm_release, ce qui mettra les pods en état 'Terminating'.
-          terraform destroy -auto-approve -var="deploy_app_of_apps=true"
-          echo "--- [END] Terraform destroy command finished. ---"
+          echo "--- [START] Cleaning Argo CD applications ---"
+          # On supprime le finalizer pour éviter le blocage si le contrôleur est en cours de suppression
+          for app in quiz-prod quiz-staging; do
+            if kubectl get application $app -n argocd > /dev/null 2>&1; then
+              echo "Patching application '$app' to remove finalizer..."
+              kubectl patch application $app -n argocd -p '{"metadata":{"finalizers":[]}}' --type=merge
+              # Maintenant on peut supprimer l'application, ce qui supprimera les ressources enfants
+              echo "Deleting application '$app'..."
+              kubectl delete application $app -n argocd --wait=true --timeout=5m
+            else
+              echo "Application '$app' not found, skipping."
+            fi
+          done
+          echo "--- [END] Argo CD applications deleted. ---"
 
-      # --- ÉTAPE 2 : NETTOYAGE FINAL DES RESSOURCES PERSISTANTES ---
-      - name: "Post-Destroy: Clean up Persistent Resources"
+      # --- ÉTAPE 2 : DÉSINSTALLATION D'ELASTICSEARCH ---
+      - name: "Pre-Destroy: Uninstall Elasticsearch Helm Chart"
         run: |
-          echo "--- [START] Cleaning up remaining PVCs and waiting for pods to terminate ---"
-          
-          # On supprime les PVCs de TOUS les namespaces applicatifs pour débloquer leur terminaison.
+          echo "--- [START] Uninstalling Elasticsearch to release pods ---"
+          helm uninstall elasticsearch -n logging --wait --timeout=5m || echo "Elasticsearch chart not found or already uninstalled."
+          echo "--- [END] Elasticsearch chart uninstalled. ---"
+
+      # --- ÉTAPE 3 : NETTOYAGE DES PVCs ET ATTENTE ---
+      - name: "Pre-Destroy: Delete All Application PVCs and Wait for Pods"
+        run: |
+          echo "--- [START] Deleting all application PVCs to unblock termination ---"
           for ns in quiz quiz-staging logging; do
             if kubectl get ns $ns > /dev/null 2>&1; then
               echo "Deleting PVCs in namespace '$ns'..."
@@ -104,13 +118,17 @@ jobs:
             fi
           done
           
-          # On attend que les pods qui utilisaient ces PVCs soient bien terminés.
-          # C'est la garantie finale que le cluster est propre.
           echo "Waiting up to 5 minutes for pods in stateful namespaces to terminate..."
           for ns in quiz quiz-staging logging; do
              if kubectl get ns $ns > /dev/null 2>&1; then
                 kubectl wait --for=delete pod --all -n $ns --timeout=5m --ignore-not-found=true || echo "Timeout or no pods found in $ns to wait for."
              fi
           done
-
           echo "--- [END] Final cleanup complete. ---"
+
+      # --- ÉTAPE 4 : DESTRUCTION FINALE DE L'INFRASTRUCTURE ---
+      - name: "Execute Terraform Destroy (DANGEROUS)"
+        run: |
+          echo "WARNING: All pre-destroy cleanup steps are done. Proceeding with 'terraform destroy'."
+          terraform init
+          terraform destroy -auto-approve -var="deploy_app_of_apps=true"
