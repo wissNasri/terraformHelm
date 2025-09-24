@@ -2,7 +2,7 @@
 # DESCRIPTION : Déploie le chart Helm d'Elasticsearch et définit un crochet de nettoyage pour la destruction.
 
 # ===================================================================
-# DÉFINITION DU MODULE ELASTICSEARCH (INCHANGÉE)
+# DÉFINITION DU MODULE ELASTICSEARCH
 # ===================================================================
 module "elasticsearch" {
   source = "../modules/alb_controller"
@@ -35,35 +35,26 @@ module "elasticsearch" {
 }
 
 # ===================================================================
-# AJOUT : RESSOURCE DE NETTOYAGE DÉDIÉE POUR ELASTICSEARCH
-# Cette ressource exécute un script uniquement lors de 'terraform destroy'.
+# RESSOURCE DE NETTOYAGE DÉDIÉE POUR ELASTICSEARCH (HOOK)
 # ===================================================================
 resource "null_resource" "elasticsearch_cleanup_hook" {
 
-  # Ce trigger force la recréation de cette ressource si le nom ou le namespace de la release change,
-  # maintenant ainsi la cohérence de l'état Terraform.
+  # Les triggers utilisent les sorties du module pour rester dynamiques.
   triggers = {
     release_name = module.elasticsearch.app.name
     namespace    = module.elasticsearch.namespace
   }
 
-  # Ce bloc de provisioner ne s'exécute QUE lors de la destruction de cette ressource null_resource.
+  # Ce bloc ne s'exécute QUE lors d'un 'terraform destroy'.
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
       echo "--- [Pre-Destroy Hook] Attempting to gracefully uninstall Helm release: ${self.triggers.release_name} in namespace ${self.triggers.namespace} ---"
-      
-      # La commande helm uninstall avec --wait attend que toutes les ressources (y compris les PVCs) soient supprimées.
-      # Le timeout de 15 minutes laisse le temps au driver CSI de supprimer le volume EBS.
-      # Le '|| echo ...' à la fin empêche le 'destroy' de planter si la release a déjà été supprimée manuellement.
       helm uninstall ${self.triggers.release_name} -n ${self.triggers.namespace} --wait --timeout 15m || echo "Helm release '${self.triggers.release_name}' not found or already deleted. Skipping."
-      
       echo "--- [Pre-Destroy Hook] Helm uninstall command for ${self.triggers.release_name} finished. ---"
     EOT
   }
 
-  # Cette ressource dépend de la création de la release Helm.
-  # Cela garantit que lors d'un 'destroy', Terraform tentera de détruire
-  # cette ressource *avant* de détruire le module 'elasticsearch' lui-même.
+  # Ce hook dépend de la création de la release Helm.
   depends_on = [module.elasticsearch]
 }
