@@ -21,7 +21,9 @@ module elasticsearch {
   values = [file("${path.module}/helm-values/elasticsearch.yaml")]
   depends_on = [
     kubernetes_storage_class_v1.example,
-    module.alb_controller
+    module.alb_controller,
+    module.ebs_csi_driver,
+    module.iam_assumable_role_with_oidc_ebs  # <-- CORRECTION FINALE
    
 
 
