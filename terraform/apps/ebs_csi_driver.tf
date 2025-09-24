@@ -1,6 +1,5 @@
 # Fichier : terraform/apps/ebs_csi_driver.tf
-# DESCRIPTION : Déploie le driver AWS EBS CSI et son rôle IAM associé.
-# VERSION FINALE 2.0 : Utilise yamlencode pour injecter correctement les permissions RBAC.
+# DESCRIPTION : Déploie le driver AWS EBS CSI avec les permissions RBAC corrigées.
 
 module "iam_assumable_role_with_oidc_ebs" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
@@ -48,22 +47,20 @@ module "ebs_csi_driver" {
     {
       name  = "controller.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
       value = module.iam_assumable_role_with_oidc_ebs.this_iam_role_arn
-    },
-    # ===================================================================
-    # CORRECTION FINALE : Injection de la règle RBAC en utilisant yamlencode
-    # ===================================================================
-    # Au lieu de définir chaque clé individuellement, nous construisons l'objet
-    # YAML complet et le passons en une seule fois. C'est la méthode correcte
-    # pour les structures de données complexes (listes d'objets).
+    }
+  ]
+
+  # CORRECTION : Utilisation de set_list pour injecter la règle RBAC.
+  set_list = [
     {
       name  = "sidecars.provisioner.additionalClusterRoleRules"
-      value = yamlencode([
-        {
+      value = [
+        yamlencode({
           apiGroups = [""]
           resources = ["persistentvolumes"]
           verbs     = ["get", "list", "watch", "patch"]
-        }
-      ])
+        })
+      ]
     }
   ]
 }
