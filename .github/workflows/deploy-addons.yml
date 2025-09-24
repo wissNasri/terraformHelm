@@ -1,5 +1,5 @@
 # Nom du fichier : .github/workflows/deploy-addons.yml
-# VERSION FINALE ROBUSTE : Gère les finalizers et l'ordre de destruction.
+# VERSION FINALE ROBUSTE v2 : Neutralise l'app-of-apps en premier.
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
@@ -59,7 +59,7 @@ jobs:
         run: terraform plan -no-color
 
   # ===================================================================
-  # JOB 2 : DESTRUCTION ORCHESTRÉE (LOGIQUE FINALE)
+  # JOB 2 : DESTRUCTION ORCHESTRÉE (LOGIQUE FINALE CORRIGÉE)
   # ===================================================================
   destroy-addons:
     name: "Orchestrated Destroy for Add-ons"
@@ -82,35 +82,54 @@ jobs:
           aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
           kubectl get nodes
 
-      # --- ÉTAPE 1 : NETTOYAGE CHIRURGICAL DES APPLICATIONS ARGO CD ---
-      - name: "Pre-Destroy: Clean Argo CD Applications and Finalizers"
+      # --- ÉTAPE 1 : NEUTRALISATION DE LA SOURCE DE VÉRITÉ ARGO CD ---
+      - name: "Pre-Destroy: Delete App-of-Apps Root to Stop Self-Healing"
         run: |
-          echo "--- [START] Cleaning Argo CD applications ---"
-          # On supprime le finalizer pour éviter le blocage si le contrôleur est en cours de suppression
+          echo "--- [START] Deleting app-of-apps-root to prevent recreation ---"
+          # On supprime d'abord le parent pour arrêter le self-healing
+          if kubectl get application app-of-apps-root -n argocd > /dev/null 2>&1; then
+            echo "Patching app-of-apps-root to remove finalizer..."
+            kubectl patch application app-of-apps-root -n argocd -p '{"metadata":{"finalizers":[]}}' --type=merge
+            echo "Deleting app-of-apps-root..."
+            kubectl delete application app-of-apps-root -n argocd --wait=false
+          else
+            echo "Application 'app-of-apps-root' not found, skipping."
+          fi
+          # On donne quelques secondes à Argo CD pour traiter la suppression
+          sleep 10
+          echo "--- [END] App-of-Apps root deleted. ---"
+
+      # --- ÉTAPE 2 : NETTOYAGE DES APPLICATIONS ENFANTS ---
+      - name: "Pre-Destroy: Clean Child Argo CD Applications"
+        run: |
+          echo "--- [START] Cleaning child applications (quiz-prod, quiz-staging) ---"
           for app in quiz-prod quiz-staging; do
             if kubectl get application $app -n argocd > /dev/null 2>&1; then
               echo "Patching application '$app' to remove finalizer..."
               kubectl patch application $app -n argocd -p '{"metadata":{"finalizers":[]}}' --type=merge
-              # Maintenant on peut supprimer l'application, ce qui supprimera les ressources enfants
               echo "Deleting application '$app'..."
-              kubectl delete application $app -n argocd --wait=true --timeout=5m
+              # On ne met pas de --wait ici pour que ça s'exécute en parallèle du reste
+              kubectl delete application $app -n argocd --wait=false
             else
               echo "Application '$app' not found, skipping."
             fi
           done
-          echo "--- [END] Argo CD applications deleted. ---"
+          echo "--- [END] Child applications deletion initiated. ---"
 
-      # --- ÉTAPE 2 : DÉSINSTALLATION D'ELASTICSEARCH ---
+      # --- ÉTAPE 3 : DÉSINSTALLATION D'ELASTICSEARCH ---
       - name: "Pre-Destroy: Uninstall Elasticsearch Helm Chart"
         run: |
           echo "--- [START] Uninstalling Elasticsearch to release pods ---"
-          helm uninstall elasticsearch -n logging --wait --timeout=5m || echo "Elasticsearch chart not found or already uninstalled."
-          echo "--- [END] Elasticsearch chart uninstalled. ---"
+          helm uninstall elasticsearch -n logging --wait=false || echo "Elasticsearch chart not found or already uninstalled."
+          echo "--- [END] Elasticsearch chart uninstallation initiated. ---"
 
-      # --- ÉTAPE 3 : NETTOYAGE DES PVCs ET ATTENTE ---
-      - name: "Pre-Destroy: Delete All Application PVCs and Wait for Pods"
+      # --- ÉTAPE 4 : NETTOYAGE FINAL ET ATTENTE ---
+      - name: "Pre-Destroy: Final Cleanup of PVCs and Pods"
         run: |
-          echo "--- [START] Deleting all application PVCs to unblock termination ---"
+          echo "--- [START] Deleting all application PVCs and waiting for pods to terminate ---"
+          # On attend un peu que les ordres de suppression des étapes précédentes soient pris en compte
+          sleep 15
+          
           for ns in quiz quiz-staging logging; do
             if kubectl get ns $ns > /dev/null 2>&1; then
               echo "Deleting PVCs in namespace '$ns'..."
@@ -126,7 +145,7 @@ jobs:
           done
           echo "--- [END] Final cleanup complete. ---"
 
-      # --- ÉTAPE 4 : DESTRUCTION FINALE DE L'INFRASTRUCTURE ---
+      # --- ÉTAPE 5 : DESTRUCTION DE L'INFRASTRUCTURE ---
       - name: "Execute Terraform Destroy (DANGEROUS)"
         run: |
           echo "WARNING: All pre-destroy cleanup steps are done. Proceeding with 'terraform destroy'."
