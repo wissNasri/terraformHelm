@@ -75,13 +75,14 @@ jobs:
   # ===================================================================
   destroy-addons:
     name: "Orchestrated Destroy for Add-ons"
-    # Ce job ne s'exécute que pour une action 'destroy' manuelle
+    # Ce job ne s'exécute que pour une action 'destroy' manuelle avec confirmation
     if: |
       github.event_name == 'workflow_dispatch' &&
       github.event.inputs.action == 'destroy' &&
       github.event.inputs.confirm_destroy == 'destroy-all-addons'
     
-    # Il dépend de la fin du job de déploiement (même si celui-ci est skippé)
+    # "needs" est placé ici, au niveau du JOB. Il est valide et indique que ce job
+    # doit attendre la fin du job "deploy-addons" avant de démarrer.
     needs: deploy-addons 
     
     runs-on: ["self-hosted", "aws-private-runner"]
@@ -101,30 +102,24 @@ jobs:
 
       # --- ÉTAPE DE NETTOYAGE APPLICATIF (ARGO CD) ---
       - name: "Pre-Destroy: Clean Argo CD Applications"
-        id: cleanup_argocd
         run: |
           echo "--- [START] Graceful cleanup for Argo CD managed applications ---"
           
-          # Installation de l'outil Argo CD CLI
           echo "Installing Argo CD CLI..."
           curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
           rm argocd-linux-amd64
           
           echo "Authenticating to Argo CD server..."
-          # Récupération sécurisée du mot de passe initial d'Argo CD
-          # NOTE : En production, utilisez un token stocké dans un secret manager.
+          # NOTE : En production, utilisez un token d'automatisation stocké dans un secret manager.
           ARGO_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d )
-          argocd login localhost:8080 --username admin --password $ARGO_PASSWORD --insecure --grpc-web
+          argocd login localhost:8080 --username admin --password "$ARGO_PASSWORD" --insecure --grpc-web
           
-          # Boucle pour supprimer proprement les applications
           for app in quiz-prod quiz-staging; do
             if argocd app get $app > /dev/null 2>&1; then
               echo "Deleting Argo CD application '$app' with cascade..."
-              # --cascade=true est crucial : il supprime les ressources gérées (y compris les PVC)
               argocd app delete $app --cascade=true --yes
               echo "Waiting for application '$app' to be fully deleted..."
-              # On attend que la suppression soit confirmée par Argo CD
               argocd app wait $app --delete --timeout 300 || echo "App '$app' already deleted or timeout reached."
             else
               echo "Argo CD application '$app' not found, skipping."
@@ -135,13 +130,11 @@ jobs:
 
       # --- ÉTAPE DE NETTOYAGE DU STOCKAGE (ELASTICSEARCH) ---
       - name: "Pre-Destroy: Clean Elasticsearch PVCs"
-        id: cleanup_es
         run: |
           echo "--- [START] Graceful cleanup for Elasticsearch PVCs ---"
           
           if kubectl get ns logging > /dev/null 2>&1; then
             echo "Namespace 'logging' found. Deleting all PersistentVolumeClaims..."
-            # Supprime tous les PVCs et attend la fin. C'est ce qui libère les volumes EBS.
             kubectl delete pvc --all -n logging --wait=true --timeout=5m
             echo "PVCs in 'logging' namespace have been deleted."
           else
@@ -152,14 +145,11 @@ jobs:
 
       # --- ÉTAPE FINALE : DESTRUCTION DE L'INFRASTRUCTURE ---
       - name: "Execute Terraform Destroy (DANGEROUS)"
-        # Cette étape dépend de la réussite des deux étapes de nettoyage précédentes
-        needs: [cleanup_argocd, cleanup_es]
         run: |
           echo "WARNING: All pre-destroy cleanup steps are done. Proceeding with 'terraform destroy'."
           
-          # Initialisation de Terraform avant le destroy
           terraform init
           
-          # On lance la destruction. Terraform s'occupera de l'ordre.
-          # La variable deploy_app_of_apps=true assure que la ressource kubernetes_manifest.app_of_apps est bien ciblée.
+          # La destruction est lancée. Les étapes précédentes étant séquentielles dans le même job,
+          # cette étape ne démarre que si les nettoyages ont réussi.
           terraform destroy -auto-approve -var="deploy_app_of_apps=true"
