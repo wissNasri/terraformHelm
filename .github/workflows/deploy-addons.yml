@@ -1,6 +1,7 @@
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
+  # ... (section 'on' inchangée)
   push:
     branches: [main]
     paths: ['terraform/apps/**', '.github/workflows/deploy-addons.yml']
@@ -30,22 +31,16 @@ jobs:
 
     steps:
     # ===================================================================
-    # CONFIGURATION
+    # ÉTAPES DE CONFIGURATION ET DE DÉPLOIEMENT (INCHANGÉES)
     # ===================================================================
     - name: Checkout source code 
       uses: actions/checkout@v4
-
     - name: Configure Kubeconfig for EKS
       run: |
         aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
         kubectl get nodes -o wide
-
     - name: Terraform Init
       run: terraform init
-
-    # ===================================================================
-    # APPLY
-    # ===================================================================
     - name: Apply Logic
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
       run: |
@@ -54,13 +49,12 @@ jobs:
         sleep 30
         terraform plan -no-color -out=plan-step2 -var="deploy_app_of_apps=true"
         terraform apply -auto-approve -input=false plan-step2
-
     - name: Validate Terraform Plan (on push)
       if: github.event_name == 'push'
       run: terraform plan -no-color
 
     # ===================================================================
-    # DESTROY - CLEANUP NAMESPACES
+    # ÉTAPE DE NETTOYAGE (MODIFIÉE : SANS LE NETTOYAGE DES PVC)
     # ===================================================================
     - name: Force-Clean Application Namespaces (if destroying)
       if: |
@@ -69,18 +63,20 @@ jobs:
         github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
         echo "--- [START] Pre-Destroy Cleanup ---"
-
+        
+        # LA PARTIE SUR LE NETTOYAGE DES PVC A ÉTÉ SUPPRIMÉE
+        
+        echo "--- Step 1: Force-cleaning application namespaces (quiz, quiz-staging) ---"
         for ns in quiz quiz-staging; do
           if kubectl get ns $ns > /dev/null 2>&1; then
-            echo "Deleting namespace '$ns'..."
-            kubectl delete ns $ns || true
-            sleep 20
-
-            # Vérifier si le namespace existe toujours
+            echo "Initiating deletion for namespace '$ns'..."
+            kubectl delete ns $ns &
+            sleep 10 # Attente pour que le statut passe à "Terminating"
+            
+            # Si le namespace est toujours là, il est bloqué. On force.
             if kubectl get ns $ns > /dev/null 2>&1; then
               echo "Namespace '$ns' is stuck. Forcing finalizer removal..."
-              kubectl get namespace $ns -o json | jq '.spec.finalizers=[]' \
-                | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
+              kubectl get namespace $ns -o json | jq '.spec.finalizers = []' | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
             else
               echo "Namespace '$ns' deleted successfully."
             fi
@@ -88,12 +84,12 @@ jobs:
             echo "Namespace '$ns' does not exist, skipping."
           fi
         done
-
+        
         echo "--- [END] Pre-destroy cleanup finished. ---"
         kubectl get ns
 
     # ===================================================================
-    # DESTROY - TERRAFORM
+    # ÉTAPE FINALE : TERRAFORM DESTROY
     # ===================================================================
     - name: Terraform Destroy (DANGEROUS)
       if: |
