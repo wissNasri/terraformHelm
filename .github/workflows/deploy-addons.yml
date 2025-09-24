@@ -1,9 +1,5 @@
 # Nom du fichier : .github/workflows/deploy-addons.yml
-# DESCRIPTION : Pipeline pour déployer ou détruire les add-ons Kubernetes.
-# La destruction est orchestrée en 3 temps :
-# 1. Forçage de la suppression des namespaces applicatifs (quiz).
-# 2. Destruction de l'infrastructure restante via Terraform.
-# 3. Nettoyage final des ressources persistantes (Elasticsearch).
+# VERSION FINALE CORRIGÉE : Correction de la commande 'kubectl wait' pour compatibilité.
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
@@ -17,29 +13,27 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'Action: "apply" or "destroy"'
+        description: 'Action: "apply" (déployer) ou "destroy" (détruire)'
         required: true
         default: 'apply'
         type: choice
         options: [apply, destroy]
       confirm_destroy:
-        description: 'If action=destroy, type "destroy-all-addons" to confirm.'
+        description: 'Si action=destroy, tapez "destroy-all-addons" pour confirmer.'
         required: false
 
 jobs:
   # ===================================================================
-  # JOB 1 : DÉPLOIEMENT OU VALIDATION (LOGIQUE "APPLY")
+  # JOB 1 : DÉPLOIEMENT (INCHANGÉ)
   # ===================================================================
   deploy-addons:
     name: "Terraform Apply for Add-ons"
-    # Ce job ne s'exécute que pour un 'apply' ou un 'push'
     if: github.event.inputs.action == 'apply' || github.event_name == 'push'
     runs-on: ["self-hosted", "aws-private-runner"]
     defaults:
       run:
         shell: bash
         working-directory: ./terraform/apps
-
     steps:
       - name: Checkout source code 
         uses: actions/checkout@v4
@@ -62,11 +56,10 @@ jobs:
         run: terraform plan -no-color
 
   # ===================================================================
-  # JOB 2 : DESTRUCTION ORCHESTRÉE (LOGIQUE "DESTROY")
+  # JOB 2 : DESTRUCTION ORCHESTRÉE (LOGIQUE HYBRIDE CORRIGÉE)
   # ===================================================================
   destroy-addons:
     name: "Orchestrated Destroy for Add-ons"
-    # Ce job ne s'exécute que pour un 'destroy' manuel avec confirmation
     if: |
       github.event_name == 'workflow_dispatch' &&
       github.event.inputs.action == 'destroy' &&
@@ -88,7 +81,7 @@ jobs:
 
       # --- ÉTAPE 1 : FORÇAGE ET VÉRIFICATION DE LA SUPPRESSION DES NS 'QUIZ' ---
       - name: "Pre-Destroy: Force-Delete and Wait for Application Namespaces"
-        if: github.event.inputs.action == 'destroy' # Assure que cette étape ne s'exécute que pour un destroy
+        if: github.event.inputs.action == 'destroy'
         run: |
           echo "--- [START] Force-deleting 'quiz' and 'quiz-staging' namespaces ---"
           for ns in quiz quiz-staging; do
@@ -100,9 +93,16 @@ jobs:
             fi
           done
           
+          # --- CORRECTION DE LA VÉRIFICATION ---
           echo "Waiting up to 2 minutes for namespaces to be fully deleted..."
           for ns in quiz quiz-staging; do
-            kubectl wait --for=delete namespace/$ns --timeout=2m --ignore-not-found=true || echo "Timeout waiting for namespace '$ns' to delete."
+            # On vérifie d'abord si le namespace existe avant de lancer le wait
+            if kubectl get ns $ns > /dev/null 2>&1; then
+              echo "Waiting for namespace '$ns' to be deleted..."
+              kubectl wait --for=delete namespace/$ns --timeout=2m || echo "Timeout waiting for namespace '$ns' to delete."
+            else
+              echo "Namespace '$ns' was already deleted."
+            fi
           done
           
           echo "--- [END] Application namespaces have been deleted. ---"
@@ -111,7 +111,7 @@ jobs:
 
       # --- ÉTAPE 2 : DESTRUCTION DE L'INFRASTRUCTURE TERRAFORM ---
       - name: "Terraform Destroy (DANGEROUS)"
-        if: github.event.inputs.action == 'destroy' # Assure que cette étape ne s'exécute que pour un destroy
+        if: github.event.inputs.action == 'destroy'
         run: |
           echo "--- [START] Running terraform destroy to delete remaining resources ---"
           terraform init
@@ -120,15 +120,21 @@ jobs:
 
       # --- ÉTAPE 3 : NETTOYAGE FINAL POUR ELASTICSEARCH ---
       - name: "Post-Destroy: Final Cleanup for Elasticsearch"
-        if: github.event.inputs.action == 'destroy' # Assure que cette étape ne s'exécute que pour un destroy
+        if: github.event.inputs.action == 'destroy'
         run: |
           echo "--- [START] Cleaning up any remaining Elasticsearch PVCs ---"
           if kubectl get ns logging > /dev/null 2>&1; then
             echo "Deleting PVCs in namespace 'logging'..."
+            # La commande delete a bien l'option --ignore-not-found
             kubectl delete pvc --all -n logging --ignore-not-found=true --timeout=5m
             
             echo "Waiting for pods in 'logging' namespace to terminate..."
-            kubectl wait --for=delete pod --all -n logging --timeout=5m --ignore-not-found=true || echo "Timeout or no pods found in 'logging' to wait for."
+            # On applique la même correction pour le wait sur les pods
+            if kubectl get pod -n logging --no-headers | grep . > /dev/null 2>&1; then
+              kubectl wait --for=delete pod --all -n logging --timeout=5m || echo "Timeout waiting for pods in 'logging' to delete."
+            else
+              echo "No pods found in 'logging' to wait for."
+            fi
           else
             echo "Namespace 'logging' not found, skipping."
           fi
