@@ -50,10 +50,5 @@ module "ebs_csi_driver" {
     }
   ]
 
-  # ===================================================================
-  # AJOUT CRUCIAL : Dépendance de destruction
-  # ===================================================================
-  # Cela force Terraform à attendre que le nettoyage d'Elasticsearch soit terminé
-  # AVANT de détruire le driver EBS CSI. C'est ce qui empêche le volume de devenir orphelin.
-  depends_on = [null_resource.elasticsearch_cleanup_hook]
-}
+
+
