@@ -104,6 +104,8 @@ jobs:
 
 # ... (début du job destroy-addons) ...
 
+# ... (début du job destroy-addons) ...
+
       - name: "Pre-Destroy: Clean Argo CD Applications"
         run: |
           echo "--- [START] Graceful cleanup for Argo CD managed applications ---"
@@ -113,22 +115,23 @@ jobs:
           sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
           rm argocd-linux-amd64
           
-          echo "Setting up temporary tunnel to Argo CD server pod..."
-          kubectl port-forward deployment/my-argo-cd-argocd-server -n argocd 8080:8080 &
-          ARGO_TUNNEL_PID=$!
-          sleep 5
+          # --- DÉBUT DE LA CORRECTION MAJEURE ---
           
-          echo "Authenticating to Argo CD server via tunnel..."
+          echo "Authenticating to Argo CD server via Ingress..."
+          
+          # On n'utilise PLUS port-forward.
+          
+          # On récupère le mot de passe comme avant.
           ARGO_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d )
           
-          # --- DÉBUT DE LA CORRECTION ---
+          # CORRECTION : On se connecte directement à l'URL de l'Ingress.
+          # --insecure : Nécessaire car le certificat est probablement auto-signé ou non approuvé par le runner.
+          # --grpc-web : ESSENTIEL car nous passons par un Ingress (ALB) qui gère le trafic web.
+          argocd login argocd.iovision.site:443 --username admin --password "$ARGO_PASSWORD" --insecure --grpc-web
           
-          # CORRECTION : On supprime le flag "--grpc-web" pour utiliser le protocole gRPC standard,
-          # ce qui correspond mieux à une connexion directe via port-forward.
-          echo "Attempting login with standard gRPC..."
-          argocd login localhost:8080 --username admin --password "$ARGO_PASSWORD" --insecure
+          # --- FIN DE LA CORRECTION MAJEURE ---
           
-          # --- FIN DE LA CORRECTION ---
+          echo "Login successful. Proceeding with application deletion..."
           
           for app in quiz-prod quiz-staging; do
             if argocd app get $app > /dev/null 2>&1; then
@@ -141,10 +144,10 @@ jobs:
             fi
           done
           
-          echo "Closing the Argo CD tunnel..."
-          kill $ARGO_TUNNEL_PID
-          
           echo "--- [END] Argo CD application cleanup finished. ---"
+
+# ... (reste du pipeline) ...
+
 
 # ... (reste du pipeline) ...
 
