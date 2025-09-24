@@ -1,6 +1,4 @@
-# Fichier : terraform/apps/kibana.tf
-
-module "kibana" {
+module kibana {
   source  = "../modules/alb_controller"
 
   namespace  = "logging"
@@ -19,8 +17,7 @@ module "kibana" {
     deploy        = 1
     disable_hooks = true
   }
-  values = [file("${path.module}/helm-values/kibana.yaml" )]
-  
-  # CHANGEMENT : Dépend du hook de nettoyage pour garantir le bon ordre de destruction.
-  depends_on = [null_resource.elasticsearch_cleanup_hook]
+  values = [file("${path.module}/helm-values/kibana.yaml")]
+  depends_on = [module.elasticsearch]
+
 }
