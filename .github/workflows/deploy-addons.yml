@@ -109,10 +109,24 @@ jobs:
           sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
           rm argocd-linux-amd64
           
-          echo "Authenticating to Argo CD server..."
-          # NOTE : En production, utilisez un token d'automatisation stocké dans un secret manager.
-          ARGO_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d )
+          echo "Setting up temporary tunnel to Argo CD server..."
+          # On utilise kubectl pour transférer le port 8080 local du runner vers le port 8080 du service argocd-server
+          # L'esperluette (& ) à la fin lance la commande en arrière-plan.
+          kubectl port-forward svc/argocd-server -n argocd 8080:80 &
+          
+          # On sauvegarde l'ID du processus (PID) du port-forward pour pouvoir le tuer proprement à la fin.
+          ARGO_TUNNEL_PID=$!
+          
+          # On attend quelques secondes pour s'assurer que le tunnel est bien établi.
+          sleep 5
+          
+          echo "Authenticating to Argo CD server via tunnel..."
+          ARGO_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
+          
+          # La commande de login reste la même, mais elle fonctionnera maintenant car le tunnel est actif.
           argocd login localhost:8080 --username admin --password "$ARGO_PASSWORD" --insecure --grpc-web
+          
+          # --- FIN DE LA MODIFICATION ---
           
           for app in quiz-prod quiz-staging; do
             if argocd app get $app > /dev/null 2>&1; then
@@ -124,6 +138,10 @@ jobs:
               echo "Argo CD application '$app' not found, skipping."
             fi
           done
+          
+          # --- AJOUT : Nettoyage du tunnel ---
+          echo "Closing the Argo CD tunnel..."
+          kill $ARGO_TUNNEL_PID
           
           echo "--- [END] Argo CD application cleanup finished. ---"
 
