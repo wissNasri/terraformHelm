@@ -28,24 +28,25 @@ jobs:
 
     steps:
     # ===================================================================
-    # ÉTAPES DE CONFIGURATION ET DE DÉPLOIEMENT
+    # ÉTAPES DE CONFIGURATION (S'EXÉCUTENT TOUJOURS)
     # ===================================================================
     - name: Checkout source code 
       uses: actions/checkout@v4
 
     - name: Configure Kubeconfig for EKS
+      # Cette étape s'exécute maintenant pour tous les déclencheurs
       run: |
         aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
         kubectl get nodes -o wide
 
     - name: Terraform Init
+      # Cette étape s'exécute aussi pour tous les déclencheurs
       run: terraform init
 
     # ===================================================================
-    # LOGIQUE DE DÉPLOIEMENT (APPLY)
+    # LOGIQUE DE DÉPLOIEMENT (APPLY) - Uniquement sur déclenchement manuel
     # ===================================================================
     - name: Terraform Apply (on manual dispatch)
-      # Cette étape s'exécute uniquement lorsqu'on lance manuellement le workflow.
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
       run: |
         echo "--- Starting Terraform Apply: Step 1 ---"
@@ -60,10 +61,8 @@ jobs:
         terraform apply -auto-approve -input=false plan-step2
 
     # ===================================================================
-    # VALIDATION POUR LES PULL REQUESTS ET PUSHES
+    # VALIDATION - Uniquement pour les Pull Requests et Pushes
     # ===================================================================
     - name: Validate Terraform Plan (on push or pull_request)
-      # Cette étape s'exécute pour valider les changements sur les branches, sans appliquer.
       if: github.event_name == 'push' || github.event_name == 'pull_request'
       run: terraform plan -no-color
-
