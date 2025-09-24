@@ -1,5 +1,5 @@
 # Nom du fichier : .github/workflows/deploy-addons.yml
-# VERSION FINALE ROBUSTE v2 : Neutralise l'app-of-apps en premier.
+# VERSION FINALE HYBRIDE : Forçage pour les apps 'quiz', nettoyage propre pour Elasticsearch.
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
@@ -59,7 +59,7 @@ jobs:
         run: terraform plan -no-color
 
   # ===================================================================
-  # JOB 2 : DESTRUCTION ORCHESTRÉE (LOGIQUE FINALE CORRIGÉE)
+  # JOB 2 : DESTRUCTION ORCHESTRÉE (LOGIQUE HYBRIDE)
   # ===================================================================
   destroy-addons:
     name: "Orchestrated Destroy for Add-ons"
@@ -82,72 +82,47 @@ jobs:
           aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
           kubectl get nodes
 
-      # --- ÉTAPE 1 : NEUTRALISATION DE LA SOURCE DE VÉRITÉ ARGO CD ---
-      - name: "Pre-Destroy: Delete App-of-Apps Root to Stop Self-Healing"
+      # --- ÉTAPE 1 : FORÇAGE DE LA SUPPRESSION DES NAMESPACES APPLICATIFS ---
+      - name: "Pre-Destroy: Force-Delete Application Namespaces (quiz, quiz-staging)"
         run: |
-          echo "--- [START] Deleting app-of-apps-root to prevent recreation ---"
-          # On supprime d'abord le parent pour arrêter le self-healing
-          if kubectl get application app-of-apps-root -n argocd > /dev/null 2>&1; then
-            echo "Patching app-of-apps-root to remove finalizer..."
-            kubectl patch application app-of-apps-root -n argocd -p '{"metadata":{"finalizers":[]}}' --type=merge
-            echo "Deleting app-of-apps-root..."
-            kubectl delete application app-of-apps-root -n argocd --wait=false
-          else
-            echo "Application 'app-of-apps-root' not found, skipping."
-          fi
-          # On donne quelques secondes à Argo CD pour traiter la suppression
-          sleep 10
-          echo "--- [END] App-of-Apps root deleted. ---"
-
-      # --- ÉTAPE 2 : NETTOYAGE DES APPLICATIONS ENFANTS ---
-      - name: "Pre-Destroy: Clean Child Argo CD Applications"
-        run: |
-          echo "--- [START] Cleaning child applications (quiz-prod, quiz-staging) ---"
-          for app in quiz-prod quiz-staging; do
-            if kubectl get application $app -n argocd > /dev/null 2>&1; then
-              echo "Patching application '$app' to remove finalizer..."
-              kubectl patch application $app -n argocd -p '{"metadata":{"finalizers":[]}}' --type=merge
-              echo "Deleting application '$app'..."
-              # On ne met pas de --wait ici pour que ça s'exécute en parallèle du reste
-              kubectl delete application $app -n argocd --wait=false
-            else
-              echo "Application '$app' not found, skipping."
-            fi
-          done
-          echo "--- [END] Child applications deletion initiated. ---"
-
-      # --- ÉTAPE 3 : DÉSINSTALLATION D'ELASTICSEARCH ---
-      - name: "Pre-Destroy: Uninstall Elasticsearch Helm Chart"
-        run: |
-          echo "--- [START] Uninstalling Elasticsearch to release pods ---"
-          helm uninstall elasticsearch -n logging --wait=false || echo "Elasticsearch chart not found or already uninstalled."
-          echo "--- [END] Elasticsearch chart uninstallation initiated. ---"
-
-      # --- ÉTAPE 4 : NETTOYAGE FINAL ET ATTENTE ---
-      - name: "Pre-Destroy: Final Cleanup of PVCs and Pods"
-        run: |
-          echo "--- [START] Deleting all application PVCs and waiting for pods to terminate ---"
-          # On attend un peu que les ordres de suppression des étapes précédentes soient pris en compte
-          sleep 15
-          
-          for ns in quiz quiz-staging logging; do
+          echo "--- [START] Force-deleting 'quiz' and 'quiz-staging' namespaces ---"
+          for ns in quiz quiz-staging; do
             if kubectl get ns $ns > /dev/null 2>&1; then
-              echo "Deleting PVCs in namespace '$ns'..."
-              kubectl delete pvc --all -n $ns --ignore-not-found=true
+              echo "Forcefully deleting namespace '$ns' by removing its finalizers..."
+              # On récupère le namespace en JSON, on vide le tableau des finalizers, et on applique la modification
+              kubectl get namespace $ns -o json | jq '.spec.finalizers = []' | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
+              echo "Finalizers removed for '$ns'. The namespace will now terminate."
+            else
+              echo "Namespace '$ns' not found, skipping."
             fi
           done
-          
-          echo "Waiting up to 5 minutes for pods in stateful namespaces to terminate..."
-          for ns in quiz quiz-staging logging; do
-             if kubectl get ns $ns > /dev/null 2>&1; then
-                kubectl wait --for=delete pod --all -n $ns --timeout=5m --ignore-not-found=true || echo "Timeout or no pods found in $ns to wait for."
-             fi
-          done
-          echo "--- [END] Final cleanup complete. ---"
+          # On attend un peu pour que la suppression soit bien prise en compte
+          sleep 15
+          echo "--- [END] Application namespaces deletion initiated. ---"
 
-      # --- ÉTAPE 5 : DESTRUCTION DE L'INFRASTRUCTURE ---
+      # --- ÉTAPE 2 : DESTRUCTION DE L'INFRASTRUCTURE TERRAFORM ---
       - name: "Execute Terraform Destroy (DANGEROUS)"
         run: |
-          echo "WARNING: All pre-destroy cleanup steps are done. Proceeding with 'terraform destroy'."
+          echo "--- [START] Running terraform destroy to delete Helm releases and other resources ---"
           terraform init
-          terraform destroy -auto-approve -var="deploy_app_of_apps=true"
+          # Terraform va maintenant supprimer le reste, y compris Elasticsearch et Argo CD.
+          # Comme les namespaces 'quiz' sont déjà en cours de suppression, il ne devrait pas y avoir de conflit.
+          terraform destroy -auto-approve -var="deploy_app_of_apps=true" || echo "Terraform destroy finished, proceeding to cleanup."
+          echo "--- [END] Terraform destroy command finished. ---"
+
+      # --- ÉTAPE 3 : NETTOYAGE FINAL POUR ELASTICSEARCH ---
+      - name: "Post-Destroy: Final Cleanup for Elasticsearch"
+        run: |
+          echo "--- [START] Cleaning up any remaining Elasticsearch PVCs ---"
+          # Cette étape est une sécurité. Le 'terraform destroy' a déjà dû supprimer le pod Elasticsearch.
+          # On supprime le PVC pour être sûr que le volume EBS est libéré.
+          if kubectl get ns logging > /dev/null 2>&1; then
+            echo "Deleting PVCs in namespace 'logging'..."
+            kubectl delete pvc --all -n logging --ignore-not-found=true --timeout=5m
+            
+            echo "Waiting for pods in 'logging' namespace to terminate..."
+            kubectl wait --for=delete pod --all -n logging --timeout=5m --ignore-not-found=true || echo "Timeout or no pods found in 'logging' to wait for."
+          else
+            echo "Namespace 'logging' not found, skipping."
+          fi
+          echo "--- [END] Elasticsearch cleanup complete. ---"
