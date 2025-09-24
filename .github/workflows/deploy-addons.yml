@@ -1,10 +1,11 @@
 # Nom du fichier : .github/workflows/deploy-addons.yml
-# DESCRIPTION : Pipeline pour détruire les add-ons avec nettoyage des namespaces uniquement.
+# DESCRIPTION : Pipeline pour déployer ou détruire les add-ons Kubernetes.
+# La destruction inclut un nettoyage spécifique pour les PVC d'Elasticsearch
+# et un nettoyage forcé pour les namespaces applicatifs.
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
-  # ... (section 'on' inchangée)
   push:
     branches: [main]
     paths: ['terraform/apps/**', '.github/workflows/deploy-addons.yml']
@@ -14,19 +15,20 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'Action: "apply" or "destroy"'
+        description: 'Action: "apply" (déployer) ou "destroy" (détruire)'
         required: true
         default: 'apply'
         type: choice
         options: [apply, destroy]
       confirm_destroy:
-        description: 'If action=destroy, type "destroy-all-addons" to confirm.'
+        description: 'Si action=destroy, tapez "destroy-all-addons" pour confirmer.'
         required: false
 
 jobs:
   deploy-addons:
     name: "Terraform for Kubernetes Add-ons"
-    runs-on: ["self-hosted", "aws-private-runner"]
+    # S'exécute sur votre runner auto-hébergé
+    runs-on: ["self-hosted", "aws-private-runner"] 
     defaults:
       run:
         shell: bash
@@ -34,71 +36,116 @@ jobs:
 
     steps:
     # ===================================================================
-    # ÉTAPES DE CONFIGURATION ET DE DÉPLOIEMENT (INCHANGÉES)
+    # ÉTAPE 1 : CONFIGURATION (CHECKOUT & KUBECONFIG)
     # ===================================================================
     - name: Checkout source code 
       uses: actions/checkout@v4
+
     - name: Configure Kubeconfig for EKS
       run: |
+        echo "--- Configuring kubectl for EKS cluster: tws-eks-cluster ---"
         aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
+        echo "--- Kubeconfig updated. Verifying node connection: ---"
         kubectl get nodes -o wide
+        echo "----------------------------------------------------"
+
+    # ===================================================================
+    # ÉTAPE 2 : LOGIQUE DE DÉPLOIEMENT (APPLY)
+    # ===================================================================
     - name: Terraform Init
+      # S'exécute pour tous les workflows pour préparer Terraform
       run: terraform init
-    - name: Apply Logic
+
+    - name: Terraform Apply (for workflow_dispatch)
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
       run: |
+        echo "--- Running Terraform Apply: Step 1 (Core Add-ons) ---"
         terraform plan -no-color -out=plan-step1
         terraform apply -auto-approve -input=false plan-step1
+        
+        echo "--- Waiting 30 seconds for add-ons to stabilize before deploying App-of-Apps ---"
         sleep 30
+        
+        echo "--- Running Terraform Apply: Step 2 (App-of-Apps) ---"
         terraform plan -no-color -out=plan-step2 -var="deploy_app_of_apps=true"
         terraform apply -auto-approve -input=false plan-step2
-    - name: Validate Terraform Plan (on push)
+
+    - name: Validate Terraform Plan (on push to main)
       if: github.event_name == 'push'
       run: terraform plan -no-color
 
     # ===================================================================
-    # ÉTAPE DE NETTOYAGE (MODIFIÉE : SANS LE NETTOYAGE DES PVC)
+    # ÉTAPE 3 : LOGIQUE DE DESTRUCTION (DESTROY)
     # ===================================================================
-    - name: Force-Clean Application Namespaces (if destroying)
+
+    # NOUVELLE ÉTAPE : Nettoyage propre des PVC d'Elasticsearch
+    - name: "Pre-Destroy: Clean Elasticsearch PVCs"
       if: |
         github.event_name == 'workflow_dispatch' &&
         github.event.inputs.action == 'destroy' &&
         github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
-        echo "--- [START] Pre-Destroy Cleanup ---"
+        echo "--- [START] Graceful cleanup for Elasticsearch PVCs ---"
         
-        # LA PARTIE SUR LE NETTOYAGE DES PVC A ÉTÉ SUPPRIMÉE
+        # Vérifie si le namespace 'logging' existe
+        if kubectl get ns logging > /dev/null 2>&1; then
+          echo "Namespace 'logging' found. Deleting all PersistentVolumeClaims in it..."
+          
+          # Supprime tous les PVC dans le namespace et attend que l'opération soit terminée (timeout de 5 minutes)
+          # C'est cette commande qui libère les PV et permet au driver CSI de supprimer les volumes EBS.
+          kubectl delete pvc --all -n logging --wait=true --timeout=5m
+          
+          echo "PVCs in 'logging' namespace have been deleted."
+        else
+          echo "Namespace 'logging' not found, skipping PVC cleanup."
+        fi
         
-        echo "--- Step 1: Force-cleaning application namespaces (quiz, quiz-staging) ---"
+        echo "--- [END] Elasticsearch PVC cleanup finished. ---"
+
+    # ÉTAPE CONSERVÉE : Nettoyage forcé des namespaces applicatifs
+    - name: "Pre-Destroy: Force-Clean Application Namespaces"
+      if: |
+        github.event_name == 'workflow_dispatch' &&
+        github.event.inputs.action == 'destroy' &&
+        github.event.inputs.confirm_destroy == 'destroy-all-addons'
+      run: |
+        echo "--- [START] Force-cleaning application namespaces (quiz, quiz-staging) ---"
+        
         for ns in quiz quiz-staging; do
           if kubectl get ns $ns > /dev/null 2>&1; then
-            echo "Initiating deletion for namespace '$ns'..."
+            echo "Initiating forced deletion for namespace '$ns'..."
+            # On supprime le namespace. L'esperluette (&) permet de passer à la suite sans attendre.
             kubectl delete ns $ns &
-            sleep 10 # Attente pour que le statut passe à "Terminating"
+            sleep 10 # Petite pause pour laisser le temps à Kubernetes de passer le namespace en "Terminating"
             
-            # Si le namespace est toujours là, il est bloqué. On force.
+            # Si après 10s le namespace est toujours là, c'est qu'il est bloqué par un finalizer.
             if kubectl get ns $ns > /dev/null 2>&1; then
               echo "Namespace '$ns' is stuck. Forcing finalizer removal..."
+              # Cette commande magique retire les finalizers qui bloquent la suppression.
               kubectl get namespace $ns -o json | jq '.spec.finalizers = []' | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
+              echo "Finalizers removed for '$ns'."
             else
-              echo "Namespace '$ns' deleted successfully."
+              echo "Namespace '$ns' deleted successfully without needing force."
             fi
           else
             echo "Namespace '$ns' does not exist, skipping."
           fi
         done
         
-        echo "--- [END] Pre-destroy cleanup finished. ---"
+        echo "--- [END] Application namespace cleanup finished. ---"
+        # Affiche les namespaces restants pour vérification
         kubectl get ns
 
-    # ===================================================================
-    # ÉTAPE FINALE : TERRAFORM DESTROY
-    # ===================================================================
-    - name: Terraform Destroy (DANGEROUS)
+    # ÉTAPE FINALE : Terraform Destroy
+    - name: "Execute Terraform Destroy (DANGEROUS)"
       if: |
         github.event_name == 'workflow_dispatch' &&
         github.event.inputs.action == 'destroy' &&
         github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
-        echo "WARNING: Proceeding with 'terraform destroy' after cleanup."
+        echo "WARNING: All pre-destroy cleanup steps are done. Proceeding with 'terraform destroy'."
+        
+        # On détruit tout en une seule fois. Terraform gérera l'ordre de dépendance.
+        # La variable deploy_app_of_apps=true assure que l'application racine est aussi ciblée par la destruction.
         terraform destroy -auto-approve -var="deploy_app_of_apps=true"
+
