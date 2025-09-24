@@ -83,7 +83,6 @@ jobs:
     
     # "needs" est placé ici, au niveau du JOB. Il est valide et indique que ce job
     # doit attendre la fin du job "deploy-addons" avant de démarrer.
-    needs: deploy-addons 
     
     runs-on: ["self-hosted", "aws-private-runner"]
     defaults:
