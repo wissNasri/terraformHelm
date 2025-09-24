@@ -103,34 +103,3 @@ jobs:
       run: |
         echo "WARNING: Proceeding with 'terraform destroy' after cleanup."
         terraform destroy -auto-approve -var="deploy_app_of_apps=true"
-
-    # ===================================================================
-    # DESTROY - POST-CLEANUP (NOUVELLE ÉTAPE)
-    # ===================================================================
-    - name: "Post-Destroy: Clean up Persistent Resources"
-      if: |
-        github.event_name == 'workflow_dispatch' &&
-        github.event.inputs.action == 'destroy' &&
-        github.event.inputs.confirm_destroy == 'destroy-all-addons'
-      run: |
-        echo "--- [START] Cleaning up remaining PVCs and waiting for pods to terminate ---"
-        
-        # On supprime les PVCs de TOUS les namespaces applicatifs pour débloquer leur terminaison.
-        for ns in quiz quiz-staging logging; do
-          if kubectl get ns $ns > /dev/null 2>&1; then
-            echo "Deleting PVCs in namespace '$ns'..."
-            kubectl delete pvc --all -n $ns --ignore-not-found=true
-          fi
-        done
-        
-        # On attend que les pods qui utilisaient ces PVCs soient bien terminés.
-        # C'est la garantie finale que le cluster est propre.
-        echo "Waiting up to 5 minutes for pods in stateful namespaces to terminate..."
-        for ns in quiz quiz-staging logging; do
-           if kubectl get ns $ns > /dev/null 2>&1; then
-              kubectl wait --for=delete pod --all -n $ns --timeout=5m --ignore-not-found=true || echo "Timeout or no pods found in $ns to wait for."
-           fi
-        done
-
-        echo "--- [END] Final cleanup complete. ---"
-
