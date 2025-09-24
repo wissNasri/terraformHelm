@@ -1,4 +1,4 @@
-name: "APPS: Deploy Kubernetes Add-ons"
+name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
   push:
@@ -10,12 +10,14 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'Action: "apply" pour déployer les add-ons'
+        description: 'Action: "apply" or "destroy"'
         required: true
         default: 'apply'
         type: choice
-        options:
-          - apply
+        options: [apply, destroy]
+      confirm_destroy:
+        description: 'If action=destroy, type "destroy-all-addons" to confirm.'
+        required: false
 
 jobs:
   deploy-addons:
@@ -28,41 +30,106 @@ jobs:
 
     steps:
     # ===================================================================
-    # ÉTAPES DE CONFIGURATION (S'EXÉCUTENT TOUJOURS)
+    # CONFIGURATION
     # ===================================================================
     - name: Checkout source code 
       uses: actions/checkout@v4
 
     - name: Configure Kubeconfig for EKS
-      # Cette étape s'exécute maintenant pour tous les déclencheurs
       run: |
         aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
         kubectl get nodes -o wide
 
     - name: Terraform Init
-      # Cette étape s'exécute aussi pour tous les déclencheurs
       run: terraform init
 
     # ===================================================================
-    # LOGIQUE DE DÉPLOIEMENT (APPLY) - Uniquement sur déclenchement manuel
+    # APPLY
     # ===================================================================
-    - name: Terraform Apply (on manual dispatch)
+    - name: Apply Logic
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
       run: |
-        echo "--- Starting Terraform Apply: Step 1 ---"
         terraform plan -no-color -out=plan-step1
         terraform apply -auto-approve -input=false plan-step1
-        
-        echo "--- Waiting 30 seconds before deploying the main application ---"
         sleep 30
-        
-        echo "--- Starting Terraform Apply: Step 2 (deploying app-of-apps) ---"
         terraform plan -no-color -out=plan-step2 -var="deploy_app_of_apps=true"
         terraform apply -auto-approve -input=false plan-step2
 
-    # ===================================================================
-    # VALIDATION - Uniquement pour les Pull Requests et Pushes
-    # ===================================================================
-    - name: Validate Terraform Plan (on push or pull_request)
-      if: github.event_name == 'push' || github.event_name == 'pull_request'
+    - name: Validate Terraform Plan (on push)
+      if: github.event_name == 'push'
       run: terraform plan -no-color
+
+    # ===================================================================
+    # DESTROY - CLEANUP NAMESPACES
+    # ===================================================================
+    - name: Force-Clean Application Namespaces (if destroying)
+      if: |
+        github.event_name == 'workflow_dispatch' &&
+        github.event.inputs.action == 'destroy' &&
+        github.event.inputs.confirm_destroy == 'destroy-all-addons'
+      run: |
+        echo "--- [START] Pre-Destroy Cleanup ---"
+
+        for ns in quiz quiz-staging; do
+          if kubectl get ns $ns > /dev/null 2>&1; then
+            echo "Deleting namespace '$ns'..."
+            kubectl delete ns $ns || true
+            sleep 20
+
+            # Vérifier si le namespace existe toujours
+            if kubectl get ns $ns > /dev/null 2>&1; then
+              echo "Namespace '$ns' is stuck. Forcing finalizer removal..."
+              kubectl get namespace $ns -o json | jq '.spec.finalizers=[]' \
+                | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
+            else
+              echo "Namespace '$ns' deleted successfully."
+            fi
+          else
+            echo "Namespace '$ns' does not exist, skipping."
+          fi
+        done
+
+        echo "--- [END] Pre-destroy cleanup finished. ---"
+        kubectl get ns
+
+    # ===================================================================
+    # DESTROY - TERRAFORM
+    # ===================================================================
+    - name: Terraform Destroy (DANGEROUS)
+      if: |
+        github.event_name == 'workflow_dispatch' &&
+        github.event.inputs.action == 'destroy' &&
+        github.event.inputs.confirm_destroy == 'destroy-all-addons'
+      run: |
+        echo "WARNING: Proceeding with 'terraform destroy' after cleanup."
+        terraform destroy -auto-approve -var="deploy_app_of_apps=true"
+
+    # ===================================================================
+    # DESTROY - POST-CLEANUP (NOUVELLE ÉTAPE)
+    # ===================================================================
+    - name: "Post-Destroy: Clean up Persistent Resources"
+      if: |
+        github.event_name == 'workflow_dispatch' &&
+        github.event.inputs.action == 'destroy' &&
+        github.event.inputs.confirm_destroy == 'destroy-all-addons'
+      run: |
+        echo "--- [START] Cleaning up remaining PVCs and waiting for pods to terminate ---"
+        
+        # On supprime les PVCs de TOUS les namespaces applicatifs pour débloquer leur terminaison.
+        for ns in quiz quiz-staging logging; do
+          if kubectl get ns $ns > /dev/null 2>&1; then
+            echo "Deleting PVCs in namespace '$ns'..."
+            kubectl delete pvc --all -n $ns --ignore-not-found=true
+          fi
+        done
+        
+        # On attend que les pods qui utilisaient ces PVCs soient bien terminés.
+        # C'est la garantie finale que le cluster est propre.
+        echo "Waiting up to 5 minutes for pods in stateful namespaces to terminate..."
+        for ns in quiz quiz-staging logging; do
+           if kubectl get ns $ns > /dev/null 2>&1; then
+              kubectl wait --for=delete pod --all -n $ns --timeout=5m --ignore-not-found=true || echo "Timeout or no pods found in $ns to wait for."
+           fi
+        done
+
+        echo "--- [END] Final cleanup complete. ---"
