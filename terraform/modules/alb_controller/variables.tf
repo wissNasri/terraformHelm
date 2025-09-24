@@ -33,7 +33,7 @@ variable "set" {
     name  = string
     value = string
   }))
-  default = []
+  default = null
 }
 
 variable "set_sensitive" {
@@ -42,35 +42,27 @@ variable "set_sensitive" {
     path  = string
     value = string
   }))
-  default = []
+  default = null
 }
 
-# AJOUT : Variable pour gérer les listes complexes
-variable "set_list" {
-  description = "Bloc de listes de valeurs à définir. Utile pour les structures YAML complexes."
-  type = list(object({
-    name  = string
-    value = list(string)
-  }))
-  default = []
-}
+# --- VARIABLES POUR LE CONTRÔLE DU DÉPLOIEMENT ---
 
 variable "wait_for_completion" {
   description = "Indique si Terraform doit attendre la fin des opérations Helm."
   type        = bool
-  default     = true
+  default     = true # Par défaut, on attend toujours. C'est plus sûr.
 }
 
 variable "timeout" {
   description = "Délai d'attente en secondes pour les opérations Helm."
   type        = number
-  default     = 300
+  default     = 300 # 5 minutes par défaut
 }
 
 variable "atomic" {
   description = "Si true, l'installation est transactionnelle et annulée en cas d'échec."
   type        = bool
-  default     = false
+  default     = false # Peut être activé pour les déploiements critiques.
 }
 
 variable "cleanup_on_fail" {
