@@ -49,6 +49,6 @@ module "ebs_csi_driver" {
       value = module.iam_assumable_role_with_oidc_ebs.this_iam_role_arn
     }
   ]
-
+}
 
 
