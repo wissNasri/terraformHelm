@@ -1,6 +1,10 @@
+# Nom du fichier : .github/workflows/deploy-addons.yml
+# DESCRIPTION : Pipeline complète avec nettoyage des PVC ET des namespaces avant la destruction.
+
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
+  # ... (section 'on' inchangée)
   push:
     branches: [main]
     paths: ['terraform/apps/**', '.github/workflows/deploy-addons.yml']
@@ -30,7 +34,7 @@ jobs:
 
     steps:
     # ===================================================================
-    # CONFIGURATION
+    # ÉTAPES DE CONFIGURATION ET DE DÉPLOIEMENT (INCHANGÉES)
     # ===================================================================
     - name: Checkout source code 
       uses: actions/checkout@v4
@@ -43,9 +47,6 @@ jobs:
     - name: Terraform Init
       run: terraform init
 
-    # ===================================================================
-    # APPLY
-    # ===================================================================
     - name: Apply Logic
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
       run: |
@@ -60,40 +61,55 @@ jobs:
       run: terraform plan -no-color
 
     # ===================================================================
-    # DESTROY - CLEANUP NAMESPACES
+    # ÉTAPE DE NETTOYAGE COMBINÉE (PVC + Namespaces)
     # ===================================================================
-    - name: Force-Clean Application Namespaces (if destroying)
+    - name: Pre-Destroy Full Cleanup (PVCs and Namespaces)
       if: |
         github.event_name == 'workflow_dispatch' &&
         github.event.inputs.action == 'destroy' &&
         github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
-        echo "--- [START] Pre-Destroy Cleanup ---"
-
+        echo "--- [START] Pre-Destroy Full Cleanup ---"
+        
+        # --- PARTIE 1 : Nettoyage du PVC d'Elasticsearch ---
+        echo "--- Step 1: Unblocking Elasticsearch PVC ---"
+        PVC_NAME="elasticsearch-master-elasticsearch-master-0"
+        PVC_NAMESPACE="logging"
+        if kubectl get pvc $PVC_NAME -n $PVC_NAMESPACE > /dev/null 2>&1; then
+          echo "Found PVC '$PVC_NAME'. Removing its finalizers to unblock deletion."
+          kubectl patch pvc $PVC_NAME -n $PVC_NAMESPACE -p '{"metadata":{"finalizers":null}}'
+        else
+          echo "Elasticsearch PVC '$PVC_NAME' not found. Skipping."
+        fi
+        
+        # --- PARTIE 2 : Nettoyage des namespaces gérés par ArgoCD ---
+        echo "--- Step 2: Force-cleaning ArgoCD-managed namespaces (quiz, quiz-staging) ---"
         for ns in quiz quiz-staging; do
           if kubectl get ns $ns > /dev/null 2>&1; then
-            echo "Deleting namespace '$ns'..."
-            kubectl delete ns $ns || true
-            sleep 20
-
-            # Vérifier si le namespace existe toujours
+            echo "Checking status of namespace '$ns'..."
+            # On tente une suppression normale d'abord
+            kubectl delete ns $ns --wait=false
+            sleep 10 # On attend un peu pour voir si le namespace passe en 'Terminating'
+            
+            # Si le namespace est toujours là, il est probablement bloqué par un finalizer
             if kubectl get ns $ns > /dev/null 2>&1; then
-              echo "Namespace '$ns' is stuck. Forcing finalizer removal..."
-              kubectl get namespace $ns -o json | jq '.spec.finalizers=[]' \
-                | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
+              echo "Namespace '$ns' is stuck in 'Terminating' state. Forcing finalizer removal..."
+              kubectl get namespace $ns -o json | jq '.spec.finalizers = []' | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
+              echo "Finalizers removed from namespace '$ns'."
             else
-              echo "Namespace '$ns' deleted successfully."
+              echo "Namespace '$ns' was deleted successfully."
             fi
           else
-            echo "Namespace '$ns' does not exist, skipping."
+            echo "Namespace '$ns' does not exist. Skipping."
           fi
         done
-
-        echo "--- [END] Pre-destroy cleanup finished. ---"
+        
+        echo "--- [END] Pre-destroy cleanup finished. Waiting for resources to be terminated..."
+        sleep 20
         kubectl get ns
 
     # ===================================================================
-    # DESTROY - TERRAFORM
+    # ÉTAPE DE DESTRUCTION EXISTANTE (INCHANGÉE)
     # ===================================================================
     - name: Terraform Destroy (DANGEROUS)
       if: |
@@ -103,3 +119,4 @@ jobs:
       run: |
         echo "WARNING: Proceeding with 'terraform destroy' after cleanup."
         terraform destroy -auto-approve -var="deploy_app_of_apps=true"
+        terraform destroy -auto-approve
