@@ -1,3 +1,6 @@
+# Fichier : terraform/apps/ebs_csi_driver.tf
+# DESCRIPTION : Déploie le driver AWS EBS CSI et son rôle IAM associé.
+
 module "iam_assumable_role_with_oidc_ebs" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   version = "~> 2.0"
@@ -10,23 +13,21 @@ module "iam_assumable_role_with_oidc_ebs" {
     Role    = "role-ebs-csi-driver"
   }
 
-  provider_url = replace(data.aws_iam_openid_connect_provider.oidc_provider.url, "https://", "" )
-
+  provider_url = replace(data.aws_iam_openid_connect_provider.oidc_provider.url, "https://", ""  )
 
   role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy",
   ]
 }
 
-
-
 module "ebs_csi_driver" {
-  source = "../modules/alb_controller" # Idéalement, à renommer en "helm_app"
+  source = "../modules/alb_controller"
+
   wait_for_completion = true
   atomic              = true
   timeout             = 600
-  namespace  = "kube-system"
-  repository = "https://kubernetes-sigs.github.io/aws-ebs-csi-driver"
+  namespace           = "kube-system"
+  repository          = "https://kubernetes-sigs.github.io/aws-ebs-csi-driver"
 
   app = {
     name          = "aws-ebs-csi-driver"
@@ -48,4 +49,11 @@ module "ebs_csi_driver" {
       value = module.iam_assumable_role_with_oidc_ebs.this_iam_role_arn
     }
   ]
+
+  # ===================================================================
+  # AJOUT CRUCIAL : Dépendance de destruction
+  # ===================================================================
+  # Cela force Terraform à attendre que le nettoyage d'Elasticsearch soit terminé
+  # AVANT de détruire le driver EBS CSI. C'est ce qui empêche le volume de devenir orphelin.
+  depends_on = [null_resource.elasticsearch_cleanup_hook]
 }
