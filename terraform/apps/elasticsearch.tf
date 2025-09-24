@@ -43,7 +43,7 @@ resource "null_resource" "elasticsearch_cleanup_hook" {
   # Ce trigger force la recréation de cette ressource si le nom ou le namespace de la release change,
   # maintenant ainsi la cohérence de l'état Terraform.
   triggers = {
-    release_name = module.elasticsearch.app["name"]
+    release_name = module.elasticsearch.app.name
     namespace    = module.elasticsearch.namespace
   }
 
