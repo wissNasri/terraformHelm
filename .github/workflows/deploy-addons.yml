@@ -90,76 +90,72 @@ jobs:
         shell: bash
         working-directory: ./terraform/apps
 
+# ... (début du job destroy-addons) ...
+
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
-
       - name: Configure Kubeconfig for EKS
         run: |
           aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
           kubectl get nodes
 
-      # --- ÉTAPE DE NETTOYAGE APPLICATIF (ARGO CD) ---
-# ... (début du job destroy-addons) ...
-
-# ... (début du job destroy-addons) ...
-
-# ... (début du job destroy-addons) ...
-
-      - name: "Pre-Destroy: Clean Argo CD Applications"
+      # --- ÉTAPE 1 : NETTOYAGE COMPLET DES APPLICATIONS ET NAMESPACES ---
+      - name: "Pre-Destroy: Initiate App Deletion and Wait for Namespaces"
         run: |
-          echo "--- [START] Graceful cleanup for Argo CD managed applications ---"
+          echo "--- [START] Full cleanup of GitOps applications and namespaces ---"
           
+          # Installation et login à Argo CD (inchangé)
           echo "Installing Argo CD CLI..."
           curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
           rm argocd-linux-amd64
           
-          # --- DÉBUT DE LA CORRECTION MAJEURE ---
-          
           echo "Authenticating to Argo CD server via Ingress..."
-          
-          # On n'utilise PLUS port-forward.
-          
-          # On récupère le mot de passe comme avant.
           ARGO_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d )
-          
-          # CORRECTION : On se connecte directement à l'URL de l'Ingress.
-          # --insecure : Nécessaire car le certificat est probablement auto-signé ou non approuvé par le runner.
-          # --grpc-web : ESSENTIEL car nous passons par un Ingress (ALB) qui gère le trafic web.
           argocd login argocd.iovision.site:443 --username admin --password "$ARGO_PASSWORD" --insecure --grpc-web
           
-          # --- FIN DE LA CORRECTION MAJEURE ---
+          # --- DÉBUT DE LA MODIFICATION ---
           
-          echo "Login successful. Proceeding with application deletion..."
-          
+          # On lance la suppression en arrière-plan pour ne pas bloquer
           for app in quiz-prod quiz-staging; do
             if argocd app get $app > /dev/null 2>&1; then
-              echo "Deleting Argo CD application '$app' with cascade..."
+              echo "Initiating deletion for Argo CD application '$app'..."
               argocd app delete $app --cascade=true --yes
-              echo "Waiting for application '$app' to be fully deleted..."
-              argocd app wait $app --delete --timeout 300 || echo "App '$app' already deleted or timeout reached."
             else
               echo "Argo CD application '$app' not found, skipping."
             fi
           done
           
-          echo "--- [END] Argo CD application cleanup finished. ---"
+          # ÉTAPE CRUCIALE : On attend que les namespaces disparaissent VRAIMENT.
+          echo "Waiting for 'quiz' and 'quiz-staging' namespaces to be fully terminated..."
+          for ns in quiz quiz-staging; do
+            if kubectl get ns $ns > /dev/null 2>&1; then
+              echo "Waiting for namespace '$ns' to terminate..."
+              # Cette commande attend que la ressource "ns $ns" n'existe plus.
+              # Le timeout est essentiel pour éviter un blocage infini.
+              kubectl wait --for=delete namespace/$ns --timeout=5m
+              echo "Namespace '$ns' has been terminated."
+            else
+              echo "Namespace '$ns' already gone."
+            fi
+          done
+          
+          # --- FIN DE LA MODIFICATION ---
+          
+          echo "--- [END] GitOps applications and namespaces cleanup finished. ---"
 
-# ... (reste du pipeline) ...
+      # --- ÉTAPE 2 : DÉSINSTALLATION DU CHART ELASTICSEARCH (INCHANGÉ) ---
+      - name: "Pre-Destroy: Uninstall Elasticsearch Helm Chart"
+        run: |
+          echo "--- [START] Uninstalling Elasticsearch to release pods ---"
+          helm uninstall elasticsearch -n logging --wait --timeout 5m || echo "Elasticsearch chart not found or already uninstalled."
+          echo "--- [END] Elasticsearch chart uninstalled. ---"
 
-
-# ... (reste du pipeline) ...
-
-
-# ... (reste du pipeline) ...
-
-
-      # --- ÉTAPE DE NETTOYAGE DU STOCKAGE (ELASTICSEARCH) ---
+      # --- ÉTAPE 3 : NETTOYAGE DU PVC D'ELASTICSEARCH (INCHANGÉ) ---
       - name: "Pre-Destroy: Clean Elasticsearch PVCs"
         run: |
           echo "--- [START] Graceful cleanup for Elasticsearch PVCs ---"
-          
           if kubectl get ns logging > /dev/null 2>&1; then
             echo "Namespace 'logging' found. Deleting all PersistentVolumeClaims..."
             kubectl delete pvc --all -n logging --wait=true --timeout=5m
@@ -167,16 +163,11 @@ jobs:
           else
             echo "Namespace 'logging' not found, skipping PVC cleanup."
           fi
-          
           echo "--- [END] Elasticsearch PVC cleanup finished. ---"
 
-      # --- ÉTAPE FINALE : DESTRUCTION DE L'INFRASTRUCTURE ---
+      # --- ÉTAPE 4 : DESTRUCTION FINALE DE L'INFRASTRUCTURE (INCHANGÉ) ---
       - name: "Execute Terraform Destroy (DANGEROUS)"
         run: |
           echo "WARNING: All pre-destroy cleanup steps are done. Proceeding with 'terraform destroy'."
-          
           terraform init
-          
-          # La destruction est lancée. Les étapes précédentes étant séquentielles dans le même job,
-          # cette étape ne démarre que si les nettoyages ont réussi.
           terraform destroy -auto-approve -var="deploy_app_of_apps=true"
