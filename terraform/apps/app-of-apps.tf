@@ -38,6 +38,7 @@ resource "kubernetes_manifest" "app_of_apps" {
   }
 
   depends_on = [
-    module.argocd
+    module.argocd,
+    module.elasticsearch
   ]
 }
