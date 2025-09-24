@@ -1,3 +1,9 @@
+# ===================================================================
+# FICHIER : .github/workflows/deploy-addons.yml (Version Corrigée)
+# DESCRIPTION : Pipeline pour déployer ou détruire les add-ons Kubernetes
+# avec une étape de nettoyage robuste avant la destruction.
+# ===================================================================
+
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
@@ -30,7 +36,7 @@ jobs:
 
     steps:
     # ===================================================================
-    # CONFIGURATION
+    # 1. ÉTAPES DE CONFIGURATION ET DE DÉPLOIEMENT (INCHANGÉES)
     # ===================================================================
     - name: Checkout source code 
       uses: actions/checkout@v4
@@ -43,10 +49,7 @@ jobs:
     - name: Terraform Init
       run: terraform init
 
-    # ===================================================================
-    # APPLY
-    # ===================================================================
-    - name: Apply Logic
+    - name: Apply Logic (if action is "apply")
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
       run: |
         terraform plan -no-color -out=plan-step1
@@ -60,27 +63,49 @@ jobs:
       run: terraform plan -no-color
 
     # ===================================================================
-    # DESTROY - CLEANUP NAMESPACES
+    # 2. ÉTAPE DE NETTOYAGE PRÉALABLE (UNIQUEMENT POUR "DESTROY")
     # ===================================================================
-    - name: Force-Clean Application Namespaces (if destroying)
+    - name: "Pre-Destroy: Clean up Persistent Resources and Namespaces"
       if: |
         github.event_name == 'workflow_dispatch' &&
         github.event.inputs.action == 'destroy' &&
         github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
         echo "--- [START] Pre-Destroy Cleanup ---"
+        
+        # Action 1: Supprimer les PVC pour débloquer les pods
+        echo "--- Step 1: Deleting PVCs in application namespaces ---"
+        for ns in quiz quiz-staging logging; do
+          if kubectl get ns $ns > /dev/null 2>&1; then
+            echo "Deleting PVCs in namespace '$ns'..."
+            kubectl delete pvc --all -n $ns --ignore-not-found=true
+          else
+            echo "Namespace '$ns' does not exist, skipping PVC cleanup."
+          fi
+        done
+        
+        # Action 2: Attendre que les pods se terminent
+        echo "--- Step 2: Waiting for pods to terminate ---"
+        for ns in quiz quiz-staging logging; do
+           if kubectl get ns $ns > /dev/null 2>&1; then
+              echo "Waiting up to 3 minutes for pods in namespace '$ns' to terminate..."
+              # Le '|| true' empêche le pipeline de planter si le timeout est atteint
+              kubectl wait --for=delete pod --all -n $ns --timeout=3m --ignore-not-found=true || true
+           fi
+        done
 
+        # Action 3: Forcer la suppression des namespaces applicatifs
+        echo "--- Step 3: Force-cleaning application namespaces ---"
         for ns in quiz quiz-staging; do
           if kubectl get ns $ns > /dev/null 2>&1; then
-            echo "Deleting namespace '$ns'..."
-            kubectl delete ns $ns || true
-            sleep 20
-
-            # Vérifier si le namespace existe toujours
+            echo "Initiating deletion for namespace '$ns'..."
+            kubectl delete ns $ns --ignore-not-found=true
+            sleep 10 # Laisse le temps au statut de passer à "Terminating"
+            
+            # Si le namespace est toujours là, on force la finalisation
             if kubectl get ns $ns > /dev/null 2>&1; then
               echo "Namespace '$ns' is stuck. Forcing finalizer removal..."
-              kubectl get namespace $ns -o json | jq '.spec.finalizers=[]' \
-                | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
+              kubectl get namespace $ns -o json | jq '.spec.finalizers = []' | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
             else
               echo "Namespace '$ns' deleted successfully."
             fi
@@ -88,12 +113,12 @@ jobs:
             echo "Namespace '$ns' does not exist, skipping."
           fi
         done
-
+        
         echo "--- [END] Pre-destroy cleanup finished. ---"
         kubectl get ns
 
     # ===================================================================
-    # DESTROY - TERRAFORM
+    # 3. ÉTAPE FINALE : TERRAFORM DESTROY
     # ===================================================================
     - name: Terraform Destroy (DANGEROUS)
       if: |
@@ -102,34 +127,5 @@ jobs:
         github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
         echo "WARNING: Proceeding with 'terraform destroy' after cleanup."
+        # La variable deploy_app_of_apps=true est cruciale pour que Terraform connaisse l'état complet à détruire
         terraform destroy -auto-approve -var="deploy_app_of_apps=true"
-
-    # ===================================================================
-    # DESTROY - POST-CLEANUP (NOUVELLE ÉTAPE)
-    # ===================================================================
-    - name: "Post-Destroy: Clean up Persistent Resources"
-      if: |
-        github.event_name == 'workflow_dispatch' &&
-        github.event.inputs.action == 'destroy' &&
-        github.event.inputs.confirm_destroy == 'destroy-all-addons'
-      run: |
-        echo "--- [START] Cleaning up remaining PVCs and waiting for pods to terminate ---"
-        
-        # On supprime les PVCs de TOUS les namespaces applicatifs pour débloquer leur terminaison.
-        for ns in quiz quiz-staging logging; do
-          if kubectl get ns $ns > /dev/null 2>&1; then
-            echo "Deleting PVCs in namespace '$ns'..."
-            kubectl delete pvc --all -n $ns --ignore-not-found=true
-          fi
-        done
-        
-        # On attend que les pods qui utilisaient ces PVCs soient bien terminés.
-        # C'est la garantie finale que le cluster est propre.
-        echo "Waiting up to 5 minutes for pods in stateful namespaces to terminate..."
-        for ns in quiz quiz-staging logging; do
-           if kubectl get ns $ns > /dev/null 2>&1; then
-              kubectl wait --for=delete pod --all -n $ns --timeout=5m --ignore-not-found=true || echo "Timeout or no pods found in $ns to wait for."
-           fi
-        done
-
-        echo "--- [END] Final cleanup complete. ---"
