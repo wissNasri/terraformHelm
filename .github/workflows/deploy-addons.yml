@@ -1,7 +1,5 @@
 # Nom du fichier : .github/workflows/deploy-addons.yml
-# DESCRIPTION : Pipeline pour déployer ou détruire les add-ons Kubernetes.
-# La destruction est orchestrée pour garantir un nettoyage complet et sans ressources orphelines
-# en supprimant les pods et les PVCs de manière contrôlée avant la destruction de l'infrastructure.
+# VERSION FINALE AMÉLIORÉE : Idempotente et logique de destruction optimisée.
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
@@ -26,7 +24,7 @@ on:
 
 jobs:
   # ===================================================================
-  # JOB 1 : DÉPLOIEMENT OU VALIDATION (LOGIQUE "APPLY")
+  # JOB 1 : DÉPLOIEMENT (INCHANGÉ)
   # ===================================================================
   deploy-addons:
     name: "Terraform Apply for Add-ons"
@@ -36,7 +34,6 @@ jobs:
       run:
         shell: bash
         working-directory: ./terraform/apps
-
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -62,7 +59,7 @@ jobs:
         run: terraform plan -no-color
 
   # ===================================================================
-  # JOB 2 : DESTRUCTION ORCHESTRÉE (LOGIQUE "DESTROY")
+  # JOB 2 : DESTRUCTION ORCHESTRÉE (LOGIQUE RECTIFIÉE)
   # ===================================================================
   destroy-addons:
     name: "Orchestrated Destroy for Add-ons"
@@ -85,60 +82,35 @@ jobs:
           aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
           kubectl get nodes
 
-      # --- ÉTAPE 1 : INITIATION DE LA SUPPRESSION DES APPLICATIONS ---
-      - name: "Pre-Destroy: Initiate Deletion of All Applications"
+      # --- ÉTAPE 1 : DESTRUCTION DE L'INFRASTRUCTURE TERRAFORM ---
+      - name: "Execute Terraform Destroy (to trigger pod termination)"
         run: |
-          echo "--- [START] Initiating deletion for all stateful applications ---"
-          
-          # Installation et login à Argo CD
-          echo "Installing Argo CD CLI and logging in..."
-          curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
-          rm argocd-linux-amd64
-          ARGO_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d )
-          argocd login argocd.iovision.site:443 --username admin --password "$ARGO_PASSWORD" --insecure --grpc-web
-          
-          # On lance la suppression des applications Argo CD
-          for app in quiz-prod quiz-staging; do
-            if argocd app get $app > /dev/null 2>&1; then
-              echo "Initiating deletion for Argo CD application '$app'..."
-              argocd app delete $app --cascade=true --yes
-            fi
-          done
-          
-          # On désinstalle le chart Helm d'Elasticsearch pour supprimer ses pods
-          echo "Uninstalling Elasticsearch to release its pods..."
-          helm uninstall elasticsearch -n logging --wait --timeout 5m || echo "Elasticsearch chart not found or already uninstalled."
-          
-          echo "--- [END] Application deletion initiated. ---"
+          echo "--- [START] Running terraform destroy to delete Helm releases and other resources ---"
+          terraform init
+          # Cette commande va supprimer les helm_release, ce qui mettra les pods en état 'Terminating'.
+          terraform destroy -auto-approve -var="deploy_app_of_apps=true"
+          echo "--- [END] Terraform destroy command finished. ---"
 
-      # --- ÉTAPE 2 : NETTOYAGE DES PVCs ET ATTENTE DE LA FIN DES PODS ---
-      - name: "Pre-Destroy: Delete All Application PVCs and Wait for Pods"
+      # --- ÉTAPE 2 : NETTOYAGE FINAL DES RESSOURCES PERSISTANTES ---
+      - name: "Post-Destroy: Clean up Persistent Resources"
         run: |
-          echo "--- [START] Deleting all application PVCs to unblock termination ---"
+          echo "--- [START] Cleaning up remaining PVCs and waiting for pods to terminate ---"
           
-          # On supprime les PVCs de TOUS les namespaces applicatifs pour initier leur terminaison
+          # On supprime les PVCs de TOUS les namespaces applicatifs pour débloquer leur terminaison.
           for ns in quiz quiz-staging logging; do
             if kubectl get ns $ns > /dev/null 2>&1; then
               echo "Deleting PVCs in namespace '$ns'..."
-              kubectl delete pvc --all -n $ns || echo "No PVCs to delete in $ns or error occurred."
+              kubectl delete pvc --all -n $ns --ignore-not-found=true
             fi
           done
           
-          # On attend que les pods qui utilisaient ces PVCs soient bien terminés
+          # On attend que les pods qui utilisaient ces PVCs soient bien terminés.
+          # C'est la garantie finale que le cluster est propre.
           echo "Waiting up to 5 minutes for pods in stateful namespaces to terminate..."
           for ns in quiz quiz-staging logging; do
              if kubectl get ns $ns > /dev/null 2>&1; then
-                # Cette commande attend qu'il n'y ait plus aucun pod dans le namespace
-                kubectl wait --for=delete pod --all -n $ns --timeout=5m || echo "Timeout waiting for pods in $ns to delete. They might be stuck."
+                kubectl wait --for=delete pod --all -n $ns --timeout=5m --ignore-not-found=true || echo "Timeout or no pods found in $ns to wait for."
              fi
           done
 
-          echo "--- [END] PVC and Pod cleanup finished. ---"
-
-      # --- ÉTAPE 3 : DESTRUCTION FINALE DE L'INFRASTRUCTURE ---
-      - name: "Execute Terraform Destroy (DANGEROUS)"
-        run: |
-          echo "WARNING: All pre-destroy cleanup steps are done. Proceeding with 'terraform destroy'."
-          terraform init
-          terraform destroy -auto-approve -var="deploy_app_of_apps=true"
+          echo "--- [END] Final cleanup complete. ---"
