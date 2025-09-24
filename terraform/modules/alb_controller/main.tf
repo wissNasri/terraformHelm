@@ -15,20 +15,16 @@ resource "helm_release" "this" {
   force_update               = lookup(var.app, "force_update", false)
   description                = lookup(var.app, "description", null)
   
-  # --- CONTRÔLES DE DÉPLOIEMENT ROBUSTES ---
   wait                       = var.wait_for_completion
   timeout                    = var.timeout
   atomic                     = var.atomic
   cleanup_on_fail            = var.cleanup_on_fail
-  # -----------------------------------------
 
   recreate_pods              = lookup(var.app, "recreate_pods", false)
   max_history                = lookup(var.app, "max_history", 0)
   lint                       = lookup(var.app, "lint", false)
   create_namespace           = lookup(var.app, "create_namespace", true)
-
   disable_webhooks           = lookup(var.app, "disable_webhooks", false)
-
   verify                     = lookup(var.app, "verify", false)
   reuse_values               = lookup(var.app, "reuse_values", false)
   reset_values               = lookup(var.app, "reset_values", false)
@@ -42,7 +38,7 @@ resource "helm_release" "this" {
   values                     = var.values
 
   dynamic "set" {
-    for_each = coalesce(var.set, [])
+    for_each = var.set
     content {
       name  = set.value.name
       value = set.value.value
@@ -50,10 +46,19 @@ resource "helm_release" "this" {
   }
 
   dynamic "set_sensitive" {
-    for_each = coalesce(var.set_sensitive, [])
+    for_each = var.set_sensitive
     content {
       name  = set_sensitive.value.name
       value = set_sensitive.value.value
+    }
+  }
+
+  # AJOUT : Bloc dynamique pour set_list
+  dynamic "set_list" {
+    for_each = var.set_list
+    content {
+      name  = set_list.value.name
+      value = set_list.value.value
     }
   }
 }
