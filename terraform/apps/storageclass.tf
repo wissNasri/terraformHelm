@@ -19,6 +19,7 @@ resource "kubernetes_storage_class_v1" "example" {
   # On ajoute la dépendance explicite au hook de nettoyage pour forcer l'ordre de destruction.
   depends_on = [
     module.ebs_csi_driver,
-    null_resource.elasticsearch_cleanup_hook
-  ]
+    module.iam_assumable_role_with_oidc_ebs
+
+]
 }
