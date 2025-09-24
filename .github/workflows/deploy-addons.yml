@@ -1,7 +1,6 @@
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
-  # ... (section 'on' inchangée)
   push:
     branches: [main]
     paths: ['terraform/apps/**', '.github/workflows/deploy-addons.yml']
@@ -31,16 +30,22 @@ jobs:
 
     steps:
     # ===================================================================
-    # ÉTAPES DE CONFIGURATION ET DE DÉPLOIEMENT (INCHANGÉES)
+    # CONFIGURATION
     # ===================================================================
     - name: Checkout source code 
       uses: actions/checkout@v4
+
     - name: Configure Kubeconfig for EKS
       run: |
         aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
         kubectl get nodes -o wide
+
     - name: Terraform Init
       run: terraform init
+
+    # ===================================================================
+    # APPLY
+    # ===================================================================
     - name: Apply Logic
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
       run: |
@@ -49,44 +54,46 @@ jobs:
         sleep 30
         terraform plan -no-color -out=plan-step2 -var="deploy_app_of_apps=true"
         terraform apply -auto-approve -input=false plan-step2
+
     - name: Validate Terraform Plan (on push)
       if: github.event_name == 'push'
       run: terraform plan -no-color
 
     # ===================================================================
-    # ÉTAPE DE NETTOYAGE (MODIFIÉE : SANS LE NETTOYAGE DES PVC)
+    # DESTROY - CLEANUP NAMESPACES
     # ===================================================================
     - name: Force-Clean Application Namespaces (if destroying)
       if: |
-          github.event_name == 'workflow_dispatch' &&
-          github.event.inputs.action == 'destroy' &&
-          github.event.inputs.confirm_destroy == 'destroy-all-addons'
+        github.event_name == 'workflow_dispatch' &&
+        github.event.inputs.action == 'destroy' &&
+        github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
-          echo "--- [START] Pre-Destroy Cleanup ---"
-      
-          for ns in quiz quiz-staging; do
+        echo "--- [START] Pre-Destroy Cleanup ---"
+
+        for ns in quiz quiz-staging; do
+          if kubectl get ns $ns > /dev/null 2>&1; then
+            echo "Deleting namespace '$ns'..."
+            kubectl delete ns $ns || true
+            sleep 20
+
+            # Vérifier si le namespace existe toujours
             if kubectl get ns $ns > /dev/null 2>&1; then
-              echo "Initiating deletion for namespace '$ns'..."
-              kubectl delete ns $ns --grace-period=0 --force || true
-              sleep 10
-      
-              if kubectl get ns $ns > /dev/null 2>&1; then
-                echo "Namespace '$ns' still exists. Removing finalizers..."
-                kubectl get namespace $ns -o json | jq '.spec.finalizers = []' \
-                  | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
-              else
-                echo "Namespace '$ns' deleted successfully."
-              fi
+              echo "Namespace '$ns' is stuck. Forcing finalizer removal..."
+              kubectl get namespace $ns -o json | jq '.spec.finalizers=[]' \
+                | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
             else
-              echo "Namespace '$ns' does not exist, skipping."
+              echo "Namespace '$ns' deleted successfully."
             fi
-          done
-      
-          echo "--- [END] Pre-destroy cleanup finished. ---"
-          kubectl get ns
+          else
+            echo "Namespace '$ns' does not exist, skipping."
+          fi
+        done
+
+        echo "--- [END] Pre-destroy cleanup finished. ---"
+        kubectl get ns
 
     # ===================================================================
-    # ÉTAPE FINALE : TERRAFORM DESTROY
+    # DESTROY - TERRAFORM
     # ===================================================================
     - name: Terraform Destroy (DANGEROUS)
       if: |
