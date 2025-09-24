@@ -1,12 +1,15 @@
-# On ajoute une variable pour contrôler la création de cette ressource
+# Fichier : terraform/apps/app-of-apps.tf
+# DESCRIPTION : Déploie l'application racine "App of Apps" d'Argo CD.
+
+# Variable pour contrôler le déploiement de cette ressource.
 variable "deploy_app_of_apps" {
   description = "Si true, déploie l'application racine App of Apps."
   type        = bool
-  default     = false # Par défaut, on ne la déploie pas.
+  default     = false
 }
 
 resource "kubernetes_manifest" "app_of_apps" {
-  # On ajoute un "count" pour activer/désactiver la ressource
+  # Utilise un 'count' pour activer ou désactiver la création de cette ressource.
   count    = var.deploy_app_of_apps ? 1 : 0
   provider = kubernetes
 
@@ -37,8 +40,17 @@ resource "kubernetes_manifest" "app_of_apps" {
     }
   }
 
+  # ===================================================================
+  # CHANGEMENT CRUCIAL DE DÉPENDANCE
+  # ===================================================================
   depends_on = [
     module.argocd,
-    module.elasticsearch
+    
+    # Au lieu de dépendre directement de 'module.elasticsearch', on dépend
+    # de son hook de nettoyage.
+    # Lors d'un 'destroy', Terraform détruira d'abord 'app_of_apps',
+    # PUIS 'null_resource.elasticsearch_cleanup_hook' (qui lance le script de désinstallation ),
+    # et enfin 'module.elasticsearch'. C'est le bon ordre.
+    null_resource.elasticsearch_cleanup_hook
   ]
 }
