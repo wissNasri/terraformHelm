@@ -58,35 +58,32 @@ jobs:
     # ===================================================================
     - name: Force-Clean Application Namespaces (if destroying)
       if: |
-        github.event_name == 'workflow_dispatch' &&
-        github.event.inputs.action == 'destroy' &&
-        github.event.inputs.confirm_destroy == 'destroy-all-addons'
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.action == 'destroy' &&
+          github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
-        echo "--- [START] Pre-Destroy Cleanup ---"
-        
-        # LA PARTIE SUR LE NETTOYAGE DES PVC A ÉTÉ SUPPRIMÉE
-        
-        echo "--- Step 1: Force-cleaning application namespaces (quiz, quiz-staging) ---"
-        for ns in quiz quiz-staging; do
-          if kubectl get ns $ns > /dev/null 2>&1; then
-            echo "Initiating deletion for namespace '$ns'..."
-            kubectl delete ns $ns &
-            sleep 10 # Attente pour que le statut passe à "Terminating"
-            
-            # Si le namespace est toujours là, il est bloqué. On force.
+          echo "--- [START] Pre-Destroy Cleanup ---"
+      
+          for ns in quiz quiz-staging; do
             if kubectl get ns $ns > /dev/null 2>&1; then
-              echo "Namespace '$ns' is stuck. Forcing finalizer removal..."
-              kubectl get namespace $ns -o json | jq '.spec.finalizers = []' | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
+              echo "Initiating deletion for namespace '$ns'..."
+              kubectl delete ns $ns --grace-period=0 --force || true
+              sleep 10
+      
+              if kubectl get ns $ns > /dev/null 2>&1; then
+                echo "Namespace '$ns' still exists. Removing finalizers..."
+                kubectl get namespace $ns -o json | jq '.spec.finalizers = []' \
+                  | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
+              else
+                echo "Namespace '$ns' deleted successfully."
+              fi
             else
-              echo "Namespace '$ns' deleted successfully."
+              echo "Namespace '$ns' does not exist, skipping."
             fi
-          else
-            echo "Namespace '$ns' does not exist, skipping."
-          fi
-        done
-        
-        echo "--- [END] Pre-destroy cleanup finished. ---"
-        kubectl get ns
+          done
+      
+          echo "--- [END] Pre-destroy cleanup finished. ---"
+          kubectl get ns
 
     # ===================================================================
     # ÉTAPE FINALE : TERRAFORM DESTROY
