@@ -1,5 +1,5 @@
 # Nom du fichier : .github/workflows/deploy-addons.yml
-# VERSION FINALE HYBRIDE : Forçage pour les apps 'quiz', nettoyage propre pour Elasticsearch.
+# VERSION FINALE HYBRIDE : Combine le forçage des namespaces 'quiz' avec un nettoyage propre pour Elasticsearch.
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
@@ -106,15 +106,15 @@ jobs:
           echo "--- [START] Running terraform destroy to delete Helm releases and other resources ---"
           terraform init
           # Terraform va maintenant supprimer le reste, y compris Elasticsearch et Argo CD.
-          # Comme les namespaces 'quiz' sont déjà en cours de suppression, il ne devrait pas y avoir de conflit.
-          terraform destroy -auto-approve -var="deploy_app_of_apps=true" || echo "Terraform destroy finished, proceeding to cleanup."
+          # La suppression de la helm_release 'elasticsearch' va mettre son pod en 'Terminating'.
+          terraform destroy -auto-approve -var="deploy_app_of_apps=true" || echo "Terraform destroy finished (may have errors on stuck resources, which is expected)."
           echo "--- [END] Terraform destroy command finished. ---"
 
       # --- ÉTAPE 3 : NETTOYAGE FINAL POUR ELASTICSEARCH ---
       - name: "Post-Destroy: Final Cleanup for Elasticsearch"
         run: |
           echo "--- [START] Cleaning up any remaining Elasticsearch PVCs ---"
-          # Cette étape est une sécurité. Le 'terraform destroy' a déjà dû supprimer le pod Elasticsearch.
+          # Cette étape est une sécurité. Le 'terraform destroy' a déjà initié la suppression du pod Elasticsearch.
           # On supprime le PVC pour être sûr que le volume EBS est libéré.
           if kubectl get ns logging > /dev/null 2>&1; then
             echo "Deleting PVCs in namespace 'logging'..."
