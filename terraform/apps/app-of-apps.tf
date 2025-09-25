@@ -1,15 +1,19 @@
-# Fichier : terraform/apps/app-of-apps.tf (Version Finale Recommandée)
+# Fichier : terraform/apps/app-of-apps.tf
 
-# Variable pour activer/désactiver le déploiement de cette ressource.
 variable "deploy_app_of_apps" {
   description = "Si true, déploie l'application racine App of Apps."
   type        = bool
   default     = false
 }
 
+# Note : La variable 'destroy_mode' est déjà définie dans le fichier principal 'variables.tf'
+# et est automatiquement disponible pour tous les fichiers .tf du même répertoire.
+
 resource "kubernetes_manifest" "app_of_apps" {
-  # Utilise la variable pour créer ou non la ressource.
-  count    = var.deploy_app_of_apps ? 1 : 0
+  # === MODIFICATION : Le 'count' dépend maintenant des deux variables ===
+  # Se crée si 'deploy_app_of_apps' est vrai ET 'destroy_mode' est faux.
+  count    = var.deploy_app_of_apps && !var.destroy_mode ? 1 : 0
+  
   provider = kubernetes
 
   manifest = {
@@ -39,10 +43,7 @@ resource "kubernetes_manifest" "app_of_apps" {
     }
   }
 
-  # === DÉPENDANCE CORRIGÉE ET EXPLICITE ===
-  # On déclare que cette ressource dépend directement d'Argo CD (pour exister )
-  # et du driver EBS CSI (car les applications enfants auront besoin de créer du stockage).
-  # On retire la dépendance inutile à Elasticsearch.
+  # Dépendance explicite et propre
   depends_on = [
     module.argocd,
     module.ebs_csi_driver
