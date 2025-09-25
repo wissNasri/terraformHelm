@@ -1,6 +1,6 @@
 # ===================================================================
 # NOM DU FICHIER : .github/workflows/deploy-addons.yml
-# VERSION FINALE CORRIGÉE
+# NOUVELLE VERSION DE DESTRUCTION ROBUSTE
 # ===================================================================
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
@@ -66,35 +66,31 @@ jobs:
       if: github.event_name == 'push'
       run: terraform plan -no-color
 
-    # --- ÉTAPES DE DESTRUCTION (MODIFIÉES POUR ÊTRE EN DEUX PHASES) ---
-    - name: "Phase 1: Destroy Applications with Persistent Storage"
+    # --- NOUVELLE STRATÉGIE DE DESTRUCTION EN DEUX PHASES ---
+    - name: "Phase 1: Trigger Destruction of Applications via Terraform Apply"
       if: |
         github.event_name == 'workflow_dispatch' &&
         github.event.inputs.action == 'destroy' &&
         github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
-        echo "--- [DESTROY - PHASE 1] Targeting applications to release storage... ---"
-        # On cible les modules qui utilisent des PVCs (Elasticsearch, Prometheus)
-        # et l'application racine d'Argo CD qui gère les applications 'quiz'.
-        terraform destroy -auto-approve \
-          -target="module.elasticsearch" \
-          -target="module.kube-prom-stack" \
-          -target="kubernetes_manifest.app_of_apps[0]" # L'index [0] est crucial car la ressource utilise 'count'
+        echo "--- [DESTROY - PHASE 1] Using 'apply' with destroy_mode=true to remove applications... ---"
+        # On lance un 'apply' en passant la variable destroy_mode=true.
+        # Terraform va voir que le 'count' des modules applicatifs passe à 0 et va les détruire.
+        # C'est une destruction ciblée, mais gérée par la logique de Terraform, pas par -target.
+        terraform apply -auto-approve -var="destroy_mode=true" -var="deploy_app_of_apps=true"
 
-    - name: "Phase 2: Destroy Core Infrastructure and Remaining Add-ons"
+    - name: "Phase 2: Final Destroy of All Remaining Infrastructure"
       if: |
         github.event_name == 'workflow_dispatch' &&
         github.event.inputs.action == 'destroy' &&
         github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
         echo "--- [PAUSE] Waiting 90 seconds for Pods and PVCs to terminate gracefully... ---"
-        # Cette pause est cruciale pour laisser le temps à Kubernetes de nettoyer les ressources.
         sleep 90
         
-        echo "--- Verifying PVC status in relevant namespaces before final destroy ---"
-        kubectl get pvc -n logging || echo "Namespace 'logging' not found or no PVCs present."
-        kubectl get pvc -n monitoring || echo "Namespace 'monitoring' not found or no PVCs present."
+        echo "--- Verifying PVC status before final destroy ---"
+        kubectl get pvc -A || echo "Could not get PVCs, continuing..."
         
         echo "--- [DESTROY - PHASE 2] Destroying all remaining infrastructure add-ons... ---"
-        # Cette commande détruit tout ce qui reste (EBS CSI Driver, ALB Controller, etc.).
+        # Maintenant que les applications sont détruites, on lance un destroy final pour le reste.
         terraform destroy -auto-approve -var="deploy_app_of_apps=true"
