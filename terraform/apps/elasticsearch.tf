@@ -1,5 +1,10 @@
-module elasticsearch {
-  source  = "../modules/alb_controller"
+# Fichier : terraform/apps/elasticsearch.tf
+
+module "elasticsearch" {
+  source = "../modules/alb_controller"
+
+  # === AJOUT : Contrôle de la création/destruction via la variable ===
+  count = var.destroy_mode ? 0 : 1
 
   wait_for_completion = true
   atomic              = true
@@ -7,7 +12,7 @@ module elasticsearch {
   timeout             = 1200 # 20 minutes
 
   namespace  = "logging"
-  repository =  "https://helm.elastic.co"
+  repository = "https://helm.elastic.co"
 
   app = {
     name          = "elasticsearch"
@@ -18,15 +23,11 @@ module elasticsearch {
     recreate_pods = false
     deploy        = 1
   }
-  values = [file("${path.module}/helm-values/elasticsearch.yaml")]
+  values     = [file("${path.module}/helm-values/elasticsearch.yaml" )]
   depends_on = [
     kubernetes_storage_class_v1.example,
     module.alb_controller,
     module.ebs_csi_driver,
-    module.iam_assumable_role_with_oidc_ebs  # <-- CORRECTION FINALE
-   
-
-
-
+    module.iam_assumable_role_with_oidc_ebs
   ]
 }
