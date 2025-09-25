@@ -1,5 +1,10 @@
-module kube-prom-stack {
-  source  = "../modules/alb_controller"
+# Fichier : terraform/apps/kube-prom-stack.tf
+
+module "kube-prom-stack" {
+  source = "../modules/alb_controller"
+
+  # === AJOUT : Contrôle de la création/destruction via la variable ===
+  count = var.destroy_mode ? 0 : 1
 
   wait_for_completion = true
   atomic              = true
@@ -7,7 +12,7 @@ module kube-prom-stack {
   timeout             = 1200
 
   namespace  = "monitoring"
-  repository =  "https://prometheus-community.github.io/helm-charts"
+  repository = "https://prometheus-community.github.io/helm-charts"
 
   app = {
     name          = "my-kube-prometheus-stack"
@@ -19,14 +24,11 @@ module kube-prom-stack {
     deploy        = 1
   }
 
-  values = [file("${path.module}/helm-values/kube-prom-stack.yaml")]
+  values = [file("${path.module}/helm-values/kube-prom-stack.yaml" )]
   depends_on = [
     module.alb_controller,
     kubernetes_storage_class_v1.example,
     module.external_dns,
-    module.iam_assumable_role_with_oidc_alb 
-
-
+    module.iam_assumable_role_with_oidc_alb
   ]
-
 }
