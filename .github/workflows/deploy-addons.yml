@@ -1,8 +1,11 @@
+# ===================================================================
+# NOM DU FICHIER : .github/workflows/deploy-addons.yml
+# VERSION FINALE CORRIGÉE
+# ===================================================================
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
-  # ... (section 'on' inchangée)
   push:
     branches: [main]
     paths: ['terraform/apps/**', '.github/workflows/deploy-addons.yml']
@@ -31,72 +34,67 @@ jobs:
         working-directory: ./terraform/apps
 
     steps:
-    # ===================================================================
-    # ÉTAPES DE CONFIGURATION ET DE DÉPLOIEMENT (INCHANGÉES)
-    # ===================================================================
+    # --- ÉTAPES DE CONFIGURATION ET DE DÉPLOIEMENT (INCHANGÉES) ---
     - name: Checkout source code 
       uses: actions/checkout@v4
+
     - name: Configure Kubeconfig for EKS
       run: |
         aws eks update-kubeconfig --region us-east-1 --name tws-eks-cluster
+        echo "--- Kubeconfig configured. Verifying node access: ---"
         kubectl get nodes -o wide
+
     - name: Terraform Init
       run: terraform init
-    - name: Apply Logic
+
+    - name: Apply Logic (for manual 'apply' trigger)
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
       run: |
+        echo "--- Running Terraform Apply in two steps ---"
+        echo "--- Step 1: Applying core add-ons ---"
         terraform plan -no-color -out=plan-step1
         terraform apply -auto-approve -input=false plan-step1
+        
+        echo "--- Waiting 30 seconds before deploying App-of-Apps ---"
         sleep 30
+        
+        echo "--- Step 2: Enabling and applying App-of-Apps ---"
         terraform plan -no-color -out=plan-step2 -var="deploy_app_of_apps=true"
         terraform apply -auto-approve -input=false plan-step2
-    - name: Validate Terraform Plan (on push)
+
+    - name: Validate Terraform Plan (on push to main)
       if: github.event_name == 'push'
       run: terraform plan -no-color
 
-    # ===================================================================
-    # ÉTAPE DE NETTOYAGE (MODIFIÉE : SANS LE NETTOYAGE DES PVC)
-    # ===================================================================
-    - name: Force-Clean Application Namespaces (if destroying)
+    # --- ÉTAPES DE DESTRUCTION (MODIFIÉES POUR ÊTRE EN DEUX PHASES) ---
+    - name: "Phase 1: Destroy Applications with Persistent Storage"
       if: |
         github.event_name == 'workflow_dispatch' &&
         github.event.inputs.action == 'destroy' &&
         github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
-        echo "--- [START] Pre-Destroy Cleanup ---"
-        
-        # LA PARTIE SUR LE NETTOYAGE DES PVC A ÉTÉ SUPPRIMÉE
-        
-        echo "--- Step 1: Force-cleaning application namespaces (quiz, quiz-staging) ---"
-        for ns in quiz quiz-staging; do
-          if kubectl get ns $ns > /dev/null 2>&1; then
-            echo "Initiating deletion for namespace '$ns'..."
-            kubectl delete ns $ns &
-            sleep 10 # Attente pour que le statut passe à "Terminating"
-            
-            # Si le namespace est toujours là, il est bloqué. On force.
-            if kubectl get ns $ns > /dev/null 2>&1; then
-              echo "Namespace '$ns' is stuck. Forcing finalizer removal..."
-              kubectl get namespace $ns -o json | jq '.spec.finalizers = []' | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
-            else
-              echo "Namespace '$ns' deleted successfully."
-            fi
-          else
-            echo "Namespace '$ns' does not exist, skipping."
-          fi
-        done
-        
-        echo "--- [END] Pre-destroy cleanup finished. ---"
-        kubectl get ns
+        echo "--- [DESTROY - PHASE 1] Targeting applications to release storage... ---"
+        # On cible les modules qui utilisent des PVCs (Elasticsearch, Prometheus)
+        # et l'application racine d'Argo CD qui gère les applications 'quiz'.
+        terraform destroy -auto-approve \
+          -target="module.elasticsearch" \
+          -target="module.kube-prom-stack" \
+          -target="kubernetes_manifest.app_of_apps[0]" # L'index [0] est crucial car la ressource utilise 'count'
 
-    # ===================================================================
-    # ÉTAPE FINALE : TERRAFORM DESTROY
-    # ===================================================================
-    - name: Terraform Destroy (DANGEROUS)
+    - name: "Phase 2: Destroy Core Infrastructure and Remaining Add-ons"
       if: |
         github.event_name == 'workflow_dispatch' &&
         github.event.inputs.action == 'destroy' &&
         github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
-        echo "WARNING: Proceeding with 'terraform destroy' after cleanup."
+        echo "--- [PAUSE] Waiting 90 seconds for Pods and PVCs to terminate gracefully... ---"
+        # Cette pause est cruciale pour laisser le temps à Kubernetes de nettoyer les ressources.
+        sleep 90
+        
+        echo "--- Verifying PVC status in relevant namespaces before final destroy ---"
+        kubectl get pvc -n logging || echo "Namespace 'logging' not found or no PVCs present."
+        kubectl get pvc -n monitoring || echo "Namespace 'monitoring' not found or no PVCs present."
+        
+        echo "--- [DESTROY - PHASE 2] Destroying all remaining infrastructure add-ons... ---"
+        # Cette commande détruit tout ce qui reste (EBS CSI Driver, ALB Controller, etc.).
         terraform destroy -auto-approve -var="deploy_app_of_apps=true"
