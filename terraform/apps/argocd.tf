@@ -2,6 +2,7 @@
 
 module "argocd" {
   source  = "../modules/alb_controller"
+  count = var.destroy_mode ? 0 : 1
 
   wait_for_completion = true
   atomic              = true
