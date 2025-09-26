@@ -74,7 +74,7 @@ jobs:
 
         echo "--- Step 2: Force-cleaning all application namespaces (Your aggressive logic) ---"
         # On reprend VOTRE logique qui a prouvé son efficacité pour tuer les pods.
-        for ns in quiz quiz-staging logging ; do
+        for ns in logging ; do
           if kubectl get ns "$ns" > /dev/null 2>&1; then
             echo "Initiating aggressive deletion for namespace '$ns'..."
             # On lance la suppression en arrière-plan
