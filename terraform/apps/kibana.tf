@@ -1,5 +1,6 @@
 module kibana {
   source  = "../modules/alb_controller"
+  count = var.destroy_mode ? 0 : 1
 
   namespace  = "logging"
   repository =  "https://helm.elastic.co"
