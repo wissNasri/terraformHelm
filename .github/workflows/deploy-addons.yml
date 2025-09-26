@@ -67,14 +67,10 @@ jobs:
       run: |
         echo "--- [START] Hybrid Pre-Destroy Cleanup ---"
         
-        echo "--- Step 1: Deleting the App-of-Apps root to disable Argo CD's self-heal ---"
-        # On supprime l'application racine pour qu'Argo CD ne se batte pas contre nous.
-        kubectl delete application app-of-apps-root -n argocd --ignore-not-found=true
-        sleep 15 # Petite pause pour que l'ordre soit pris en compte
 
-        echo "--- Step 2: Force-cleaning all application namespaces (Your aggressive logic) ---"
+        echo "--- Step : Force-cleaning quiz quiz-staging logging (Your aggressive logic) ---"
         # On reprend VOTRE logique qui a prouvé son efficacité pour tuer les pods.
-        for ns in logging ; do
+        for ns in quiz quiz-staging logging ; do
           if kubectl get ns "$ns" > /dev/null 2>&1; then
             echo "Initiating aggressive deletion for namespace '$ns'..."
             # On lance la suppression en arrière-plan
