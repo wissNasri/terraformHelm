@@ -1,6 +1,6 @@
 # ===================================================================
 # NOM DU FICHIER : .github/workflows/deploy-addons.yml
-# VERSION AVEC SCAN DE SÉCURITÉ CHECKOV INTÉGRÉ
+# VERSION AVEC SCAN DE SÉCURITÉ CHECKOV INTÉGRÉ (CORRIGÉ)
 # ===================================================================
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
@@ -26,42 +26,45 @@ on:
 
 jobs:
   # ===================================================================
-  # MODIFICATION 1: Ajout d'un nouveau job pour le scan de sécurité
-  # Ce job s'exécute sur un runner hébergé par GitHub et valide le code Terraform.
+  # JOB DE SCAN CHECKOV CORRIGÉ ET SIMPLIFIÉ
   # ===================================================================
   security_scan:
     name: "Security: Scan Add-ons IaC with Checkov"
-    runs-on: ubuntu-latest # Utilise un runner GitHub standard, plus rapide pour cette tâche
+    runs-on: ubuntu-latest
     permissions:
-      contents: read 
+      contents: read # Permission nécessaire pour que l'action checkout puisse lire le code
+
     steps:
     - name: Checkout source code 
       uses: actions/checkout@v4
 
-    - name: Run Checkov scan on add-ons code
+    - name: Run Checkov scan and generate JSON report
       uses: bridgecrewio/checkov-action@master
       with:
         # Cible spécifiquement le répertoire des applications
         directory: ./terraform/apps
         framework: terraform
-        output_format: cli,json
-        output_file_path: console,./checkov-report.json
-        # soft_fail: true permet au pipeline de continuer même si des erreurs sont trouvées.
-        # Passez à 'false' pour bloquer le déploiement en cas de problème de sécurité.
+        # MODIFICATION : Génère uniquement le rapport JSON comme demandé
+        output_format: json
+        output_file_path: checkov-report.json
+        # Le pipeline s'arrêtera si une erreur est trouvée.
+        # Pour autoriser la continuation, changez la valeur ci-dessous pour 'true'.
         soft_fail: false
 
-    - name: Upload Checkov json report as artifact
+    - name: Upload Checkov JSON report as artifact
+      # MODIFICATION : Cette étape s'exécutera toujours, même si l'étape précédente échoue,
+      # pour que vous ayez toujours le rapport d'erreurs à analyser.
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: checkov-addons-report
-        path: ./checkov-report.json
+        name: checkov-addons-report-json
+        path: checkov-report.json
 
   # ===================================================================
-  # MODIFICATION 2: Le job de déploiement dépend maintenant du succès du scan
+  # JOB DE DÉPLOIEMENT (INCHANGÉ)
   # ===================================================================
   deploy-addons:
     name: "Terraform for Kubernetes Add-ons"
-    # Assure que le scan de sécurité est terminé avant de commencer le déploiement
     needs: security_scan
     runs-on: ["self-hosted", "aws-private-runner"]
     defaults:
@@ -70,7 +73,7 @@ jobs:
         working-directory: ./terraform/apps
 
     steps:
-    # --- ÉTAPES DE CONFIGURATION ET DE DÉPLOIEMENT (INCHANGÉES) ---
+    # --- Le reste des étapes est inchangé ---
     - name: Checkout source code 
       uses: actions/checkout@v4
     - name: Configure Kubeconfig for EKS
