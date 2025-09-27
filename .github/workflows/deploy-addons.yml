@@ -1,12 +1,11 @@
 # ===================================================================
 # NOM DU FICHIER : .github/workflows/deploy-addons.yml
-# VERSION HYBRIDE : DÉSACTIVATION D'ARGO + NETTOYAGE FORCÉ
+# VERSION AVEC SCAN DE SÉCURITÉ CHECKOV INTÉGRÉ
 # ===================================================================
 
 name: "APPS: Deploy or Destroy Kubernetes Add-ons"
 
 on:
-  # ... (inchangé)
   push:
     branches: [main]
     paths: ['terraform/apps/**', '.github/workflows/deploy-addons.yml']
@@ -26,8 +25,43 @@ on:
         required: false
 
 jobs:
+  # ===================================================================
+  # MODIFICATION 1: Ajout d'un nouveau job pour le scan de sécurité
+  # Ce job s'exécute sur un runner hébergé par GitHub et valide le code Terraform.
+  # ===================================================================
+  security_scan:
+    name: "Security: Scan Add-ons IaC with Checkov"
+    runs-on: ubuntu-latest # Utilise un runner GitHub standard, plus rapide pour cette tâche
+    
+    steps:
+    - name: Checkout source code 
+      uses: actions/checkout@v4
+
+    - name: Run Checkov scan on add-ons code
+      uses: bridgecrewio/checkov-action@master
+      with:
+        # Cible spécifiquement le répertoire des applications
+        directory: ./terraform/apps
+        framework: terraform
+        output_format: cli,html
+        output_file_path: console,./checkov-report.html
+        # soft_fail: true permet au pipeline de continuer même si des erreurs sont trouvées.
+        # Passez à 'false' pour bloquer le déploiement en cas de problème de sécurité.
+        soft_fail: true
+
+    - name: Upload Checkov HTML report as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: checkov-addons-report
+        path: ./checkov-report.html
+
+  # ===================================================================
+  # MODIFICATION 2: Le job de déploiement dépend maintenant du succès du scan
+  # ===================================================================
   deploy-addons:
     name: "Terraform for Kubernetes Add-ons"
+    # Assure que le scan de sécurité est terminé avant de commencer le déploiement
+    needs: security_scan
     runs-on: ["self-hosted", "aws-private-runner"]
     defaults:
       run:
@@ -56,9 +90,7 @@ jobs:
       if: github.event_name == 'push'
       run: terraform plan -no-color
 
-    # ===================================================================
-    # ÉTAPE DE NETTOYAGE HYBRIDE (VOTRE LOGIQUE + MA SUGGESTION)
-    # ===================================================================
+    # --- ÉTAPE DE NETTOYAGE HYBRIDE (INCHANGÉE) ---
     - name: Hybrid Cleanup (if destroying)
       if: |
         github.event_name == 'workflow_dispatch' &&
@@ -66,19 +98,11 @@ jobs:
         github.event.inputs.confirm_destroy == 'destroy-all-addons'
       run: |
         echo "--- [START] Hybrid Pre-Destroy Cleanup ---"
-        
-
-        echo "--- Step : Force-cleaning quiz quiz-staging logging (Your aggressive logic) ---"
-        # On reprend VOTRE logique qui a prouvé son efficacité pour tuer les pods.
         for ns in quiz quiz-staging logging ; do
           if kubectl get ns "$ns" > /dev/null 2>&1; then
             echo "Initiating aggressive deletion for namespace '$ns'..."
-            # On lance la suppression en arrière-plan
             kubectl delete ns "$ns" &
-            # On attend un peu que le statut passe à Terminating
             sleep 10
-            
-            # Si le namespace est toujours là (bloqué par un finalizer), on force !
             if kubectl get ns "$ns" > /dev/null 2>&1; then
               echo "Namespace '$ns' is stuck. Forcing finalizer removal..."
               kubectl get namespace "$ns" -o json | jq '.spec.finalizers = []' | kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f - || echo "Finalizer removal for $ns failed, but continuing."
@@ -89,16 +113,12 @@ jobs:
             echo "Namespace '$ns' does not exist, skipping."
           fi
         done
-        
         echo "--- [PAUSE] Waiting 60 seconds for resources to disappear and PVCs to be released... ---"
         sleep 60
-        
         echo "--- [END] Pre-destroy cleanup finished. Verifying PV status. ---"
         kubectl get pv
 
-    # ===================================================================
-    # ÉTAPE FINALE : TERRAFORM DESTROY (INCHANGÉE)
-    # ===================================================================
+    # --- ÉTAPE FINALE : TERRAFORM DESTROY (INCHANGÉE) ---
     - name: Terraform Destroy (DANGEROUS)
       if: |
         github.event_name == 'workflow_dispatch' &&
