@@ -43,17 +43,17 @@ jobs:
         # Cible spécifiquement le répertoire des applications
         directory: ./terraform/apps
         framework: terraform
-        output_format: cli,html
-        output_file_path: console,./checkov-report.html
+        output_format: cli,json
+        output_file_path: console,./checkov-report.json
         # soft_fail: true permet au pipeline de continuer même si des erreurs sont trouvées.
         # Passez à 'false' pour bloquer le déploiement en cas de problème de sécurité.
         soft_fail: true
 
-    - name: Upload Checkov HTML report as artifact
+    - name: Upload Checkov json report as artifact
       uses: actions/upload-artifact@v4
       with:
         name: checkov-addons-report
-        path: ./checkov-report.html
+        path: ./checkov-report.json
 
   # ===================================================================
   # MODIFICATION 2: Le job de déploiement dépend maintenant du succès du scan
