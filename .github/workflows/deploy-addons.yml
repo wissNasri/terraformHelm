@@ -32,7 +32,8 @@ jobs:
   security_scan:
     name: "Security: Scan Add-ons IaC with Checkov"
     runs-on: ubuntu-latest # Utilise un runner GitHub standard, plus rapide pour cette tâche
-    
+    permissions:
+      contents: read 
     steps:
     - name: Checkout source code 
       uses: actions/checkout@v4
