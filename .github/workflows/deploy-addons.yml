@@ -47,7 +47,7 @@ jobs:
         output_file_path: console,./checkov-report.json
         # soft_fail: true permet au pipeline de continuer même si des erreurs sont trouvées.
         # Passez à 'false' pour bloquer le déploiement en cas de problème de sécurité.
-        soft_fail: true
+        soft_fail: false
 
     - name: Upload Checkov json report as artifact
       uses: actions/upload-artifact@v4
