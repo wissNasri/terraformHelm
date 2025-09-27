@@ -5,6 +5,8 @@ terraform {
     bucket         = "terraform-s3-backend-tws-hackathon1111"
     key            = "apps/terraform.tfstate"
     region         = "us-east-1"
+    dynamodb_table = "terraform-locks"
+    encrypt = true
   }
 
   required_providers {
