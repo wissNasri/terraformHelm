@@ -1,14 +1,9 @@
-# Fichier : terraform/apps/app-of-apps.tf
 
 variable "deploy_app_of_apps" {
   description = "Si true, déploie l'application racine App of Apps."
   type        = bool
   default     = false
 }
-
-# Note : La variable 'destroy_mode' est déjà définie dans le fichier principal 'variables.tf'
-# et est automatiquement disponible pour tous les fichiers .tf du même répertoire.
-
 resource "kubernetes_manifest" "app_of_apps" {
   # === MODIFICATION : Le 'count' dépend maintenant des deux variables ===
   # Se crée si 'deploy_app_of_apps' est vrai ET 'destroy_mode' est faux.
@@ -42,8 +37,6 @@ resource "kubernetes_manifest" "app_of_apps" {
       }
     }
   }
-
-  # Dépendance explicite et propre
   depends_on = [
     module.argocd,
     module.ebs_csi_driver
