@@ -1,7 +1,7 @@
-# Fichier : terraform/apps/argocd.tf
+
 
 module "argocd" {
-  source  = "../modules/alb_controller"
+  source  = "../modules/helm_app"
   count = var.destroy_mode ? 0 : 1
 
   wait_for_completion = true
