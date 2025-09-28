@@ -1,7 +1,7 @@
-# Fichier : terraform/apps/kube-prom-stack.tf
+
 
 module "kube-prom-stack" {
-  source = "../modules/alb_controller"
+  source = "../modules/helm_app"
 
   # === AJOUT : Contrôle de la création/destruction via la variable ===
   count = var.destroy_mode ? 0 : 1
