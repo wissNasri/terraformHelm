@@ -21,7 +21,7 @@ module "iam_assumable_role_with_oidc_ebs" {
 
 
 module "ebs_csi_driver" {
-  source = "../modules/alb_controller" # Idéalement, à renommer en "helm_app"
+  source = "../modules/helm_app" 
   wait_for_completion = true
   atomic              = true
   timeout             = 600
