@@ -1,7 +1,7 @@
 resource "aws_iam_policy" "alb_policy" {
   name        = "AWSLoadBalancerControllerIAMPolicy"
   path   = "/"
-  policy = file("${path.module}/iam_policy.json") # Assurez-vous que ce fichier existe
+  policy = file("${path.module}/iam_policy.json") 
 }
 
 
@@ -22,7 +22,7 @@ module "iam_assumable_role_with_oidc_alb" {
 }
 
 module "alb_controller" {
-  source = "../modules/alb_controller" 
+  source = "../modules/helm_app" 
 
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
