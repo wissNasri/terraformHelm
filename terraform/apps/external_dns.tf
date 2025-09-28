@@ -28,7 +28,7 @@ module "iam_assumable_role_with_oidc_external_dns" {
 }
 
 module "external_dns" {
-  source = "../modules/alb_controller"
+  source = "../modules/helm_app"
 
   namespace  = "kube-system"
   repository = "https://kubernetes-sigs.github.io/external-dns/"
