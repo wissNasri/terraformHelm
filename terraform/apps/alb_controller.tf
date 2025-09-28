@@ -23,14 +23,11 @@ module "iam_assumable_role_with_oidc_alb" {
 
 module "alb_controller" {
   source = "../modules/helm_app" 
-
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
-
   wait_for_completion = true
   atomic              = true
   timeout             = 600
-
   app = {
     name          = "aws-load-balancer-controller"
     chart         = "aws-load-balancer-controller"
@@ -38,16 +35,13 @@ module "alb_controller" {
     force_update  = true
     recreate_pods = false
     deploy        = 1
-
   }
-
   values = [templatefile("${path.module}/helm-values/alb_controller-1.13.3.yaml", {
     cluster_name  = var.eks_cluster_name
     region        = var.aws_region
     vpc_id        = data.aws_eks_cluster.cluster.vpc_config[0].vpc_id 
     replicaCount  = 1
   } )]
-
   set = [
     {
       name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
