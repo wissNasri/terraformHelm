@@ -1,9 +1,7 @@
-# Fichier : terraform/apps/elasticsearch.tf
 
 module "elasticsearch" {
   source = "../modules/helm_app"
 
-  # === AJOUT : Contrôle de la création/destruction via la variable ===
   count = var.destroy_mode ? 0 : 1
 
   wait_for_completion = true
