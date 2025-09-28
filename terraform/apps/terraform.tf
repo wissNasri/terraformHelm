@@ -1,4 +1,3 @@
-# Fichier : terraform/apps/terraform.tf
 
 terraform {
   backend "s3" {
