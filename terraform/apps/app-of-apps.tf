@@ -1,4 +1,3 @@
-
 variable "deploy_app_of_apps" {
   description = "Si true, déploie l'application racine App of Apps."
   type        = bool
