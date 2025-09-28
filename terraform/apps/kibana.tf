@@ -1,5 +1,5 @@
 module kibana {
-  source  = "../modules/alb_controller"
+  source  = "../modules/helm_app"
   count = var.destroy_mode ? 0 : 1
 
   namespace  = "logging"
