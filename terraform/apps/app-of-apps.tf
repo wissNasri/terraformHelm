@@ -5,12 +5,8 @@ variable "deploy_app_of_apps" {
   default     = false
 }
 resource "kubernetes_manifest" "app_of_apps" {
-  # === MODIFICATION : Le 'count' dépend maintenant des deux variables ===
-  # Se crée si 'deploy_app_of_apps' est vrai ET 'destroy_mode' est faux.
   count    = var.deploy_app_of_apps && !var.destroy_mode ? 1 : 0
-  
   provider = kubernetes
-
   manifest = {
     "apiVersion" = "argoproj.io/v1alpha1"
     "kind"       = "Application"
