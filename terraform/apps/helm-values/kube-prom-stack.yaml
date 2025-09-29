@@ -541,7 +541,7 @@ alertmanager:
       routes:
       - receiver: 'slack-notification'
         matchers:
-          - severity = "critical"
+          - severity = "warning"
     receivers:
     - name: 'slack-notification'
       slack_configs:
