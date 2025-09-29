@@ -48,7 +48,7 @@ module "external_dns" {
   set = [
     {
       name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-      value = module.iam_assumable_role_with_oidc_external_dns.this_iam_role_arn # CORRECTION 2
+      value = module.iam_assumable_role_with_oidc_external_dns.this_iam_role_arn 
     }
   ]
 
