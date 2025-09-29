@@ -545,7 +545,7 @@ alertmanager:
     receivers:
     - name: 'slack-notification'
       slack_configs:
-        - api_url: 'https://hooks.slack.com/services/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'
+        - api_url: 'https://hooks.slack.com/services/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'
           channel: '#alerts'
           send_resolved: true
     templates:
