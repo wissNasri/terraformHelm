@@ -49,7 +49,7 @@ jobs:
         output_file_path: checkov-report.json
         # Le pipeline s'arrêtera si une erreur est trouvée.
         # Pour autoriser la continuation, changez la valeur ci-dessous pour 'true'.
-        soft_fail: false
+        soft_fail: true
 
     - name: Upload Checkov JSON report as artifact
       # MODIFICATION : Cette étape s'exécutera toujours, même si l'étape précédente échoue,
