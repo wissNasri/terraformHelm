@@ -2,7 +2,7 @@
 
 module "metrics_server" {
   # On réutilise votre excellent module de déploiement Helm
-  source = "../modules/alb_controller" # Ou "../modules/helm_app" si vous le renommez
+  source = "../modules/helm_app" # Ou "../modules/helm_app" si vous le renommez
 
   # Déploiement dans l'espace de noms standard pour les composants système
   namespace  = "kube-system"
