@@ -34,67 +34,24 @@ daemonset:
   # Allows you to add any config files in /usr/share/filebeat
   # such as filebeat.yml for daemonset
   filebeatConfig:
-    filebeat.yml: |
-      # ===================================================================
-      # CONFIGURATION FILEBEAT AVEC AUTODISCOVER
-      # ===================================================================
-
-      # On active la fonctionnalité de découverte automatique basée sur Kubernetes
-      filebeat.autodiscover:
-        providers:
-          - type: kubernetes
-            node: ${NODE_NAME}
-            hints.enabled: true
-            hints.default_config:
-              type: container
-              paths:
-                - /var/log/containers/${data.kubernetes.container.id}.log
-
-            # --- FILTRAGE À LA SOURCE ---
-            # On dit à Autodiscover de ne s'intéresser qu'aux pods qui
-            # remplissent les conditions suivantes.
-            templates:
-              - condition:
-                  # Condition 1 : Le pod doit être dans le namespace "quiz"
-                  equals:
-                    kubernetes.namespace: "quiz"
-                config:
-                  - type: container
-                    paths:
-                      - "/var/log/containers/*_${data.kubernetes.namespace}_${data.kubernetes.pod.name}_${data.kubernetes.container.name}-*.log"
-                    # On ajoute un champ personnalisé pour identifier facilement la source
-                    fields:
-                      env: production
-
-              - condition:
-                  # Condition 2 : Le pod doit être dans le namespace "quiz-staging"
-                  equals:
-                    kubernetes.namespace: "quiz-staging"
-                config:
-                  - type: container
-                    paths:
-                      - "/var/log/containers/*_${data.kubernetes.namespace}_${data.kubernetes.pod.name}_${data.kubernetes.container.name}-*.log"
-                    # On ajoute un champ personnalisé
-                    fields:
-                      env: staging
-
-      # On ajoute un processeur global pour enrichir tous les logs collectés
-      processors:
-        - add_cloud_metadata: {}
-        - add_host_metadata: {}
+      filebeat.inputs:
+      - type: container
+        paths:
+          - /var/log/containers/*easyshop*.log
+        processors:
+        - add_kubernetes_metadata:
+            host: ${NODE_NAME}
+            matchers:
+            - logs_path:
+                logs_path: "/var/log/containers/"
 
       output.elasticsearch:
+        host: '${NODE_NAME}'
         hosts: '["https://${ELASTICSEARCH_HOSTS:elasticsearch-master:9200}"]'
         username: '${ELASTICSEARCH_USERNAME}'
         password: '${ELASTICSEARCH_PASSWORD}'
-        
-        # On supprime la vérification du certificat car nous sommes dans un réseau de cluster interne.
-        # Filebeat fera confiance au certificat auto-signé présenté par Elasticsearch.
-        ssl.verification_mode: none 
-        
-        # La ligne suivante n'est plus nécessaire et peut être supprimée ou commentée
-        # ssl.certificate_authorities: ["/usr/share/filebeat/certs/ca.crt"]
-  # Only used when updateStrategy is set to "RollingUpdate"
+        protocol: https
+        ssl.certificate_authorities: ["/usr/share/filebeat/certs/ca.crt"]
   maxUnavailable: 1
   nodeSelector: {}
   # A list of secrets and their paths to mount inside the pod
