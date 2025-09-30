@@ -541,11 +541,11 @@ alertmanager:
       routes:
       - receiver: 'slack-notification'
         matchers:
-          - severity = "warning"
+          - severity = "critical"
     receivers:
     - name: 'slack-notification'
       slack_configs:
-        - api_url: 'https://hooks.slack.com/services/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'
+        - api_url: 'https://hooks.slack.com/services/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'
           channel: 'alerts'
           send_resolved: true
     templates:
