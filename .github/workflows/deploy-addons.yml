@@ -87,10 +87,10 @@ jobs:
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
       run: |
         terraform plan -no-color -out=plan-step1
-        terraform apply -auto-approve -input=false plan-step1 -lock=false
+        terraform apply -auto-approve -input=false plan-step1
         sleep 30
         terraform plan -no-color -out=plan-step2 -var="deploy_app_of_apps=true"
-        terraform apply -auto-approve -input=false plan-step2 -lock=false
+        terraform apply -auto-approve -input=false plan-step2
     - name: Validate Terraform Plan (on push)
       if: github.event_name == 'push'
       run: terraform plan -no-color
