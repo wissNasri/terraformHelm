@@ -1310,12 +1310,9 @@ grafana:
 
   ingress:
     ## If true, Grafana Ingress will be created
-    ##
     enabled: true
-
     ## IngressClassName for Grafana Ingress.
     ## Should be provided if Ingress is enable.
-    ##
     ingressClassName: alb
 
     ## Annotations for Grafana Ingress
@@ -1331,7 +1328,6 @@ grafana:
       # kubernetes.io/tls-acme: "true"
 
     ## Labels to be added to the Ingress
-    ##
     labels: {}
 
     ## Hostnames.
